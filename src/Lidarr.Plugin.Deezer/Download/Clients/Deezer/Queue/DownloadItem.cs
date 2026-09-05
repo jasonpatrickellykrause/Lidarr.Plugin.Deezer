@@ -78,6 +78,8 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         {
             List<Task> tasks = new();
             using SemaphoreSlim semaphore = new(1, 1);
+            var isFirstTrack = true;
+            var random = new Random();
             foreach (var (trackId, trackSize) in _tracks)
             {
                 tasks.Add(Task.Run(async () =>
@@ -85,6 +87,14 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     await semaphore.WaitAsync(cancellation);
                     try
                     {
+                        // pace requests to Deezer; hammering it back to back is a known way to get an ARL invalidated
+                        if (!isFirstTrack && settings.DownloadDelay > 0)
+                        {
+                            var jitter = random.Next(0, settings.DownloadDelay / 2 + 1);
+                            await Task.Delay(settings.DownloadDelay + jitter, cancellation);
+                        }
+                        isFirstTrack = false;
+
                         await DoTrackDownload(trackId, settings, cancellation);
                         DownloadedSize += trackSize;
                     }

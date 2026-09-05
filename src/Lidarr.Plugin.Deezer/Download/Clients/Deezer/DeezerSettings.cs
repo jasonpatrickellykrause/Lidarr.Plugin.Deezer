@@ -27,6 +27,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer
         [FieldDefinition(2, Label = "Use LRCLIB as Backup Lyric Provider", HelpText = "If Deezer does not have plain or synced lyrics for a track, the plugin will attempt to get them from LRCLIB.", Type = FieldType.Checkbox)]
         public bool UseLRCLIB { get; set; } = false;
 
+        [FieldDefinition(3, Label = "Download Delay", Unit = "ms", HelpText = "Minimum delay between track downloads. Deezer has been known to invalidate ARLs that are used to make requests in rapid succession; a small delay makes the traffic pattern look less automated. A random amount of jitter (up to half this value) is added on top.", Type = FieldType.Number, Advanced = true)]
+        public int DownloadDelay { get; set; } = 1500;
+
         public NzbDroneValidationResult Validate()
         {
             return new NzbDroneValidationResult(Validator.Validate(this));

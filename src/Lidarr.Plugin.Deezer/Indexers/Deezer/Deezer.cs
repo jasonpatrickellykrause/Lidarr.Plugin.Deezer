@@ -16,7 +16,8 @@ namespace NzbDrone.Core.Indexers.Deezer
         public override bool SupportsRss => false;
         public override bool SupportsSearch => true;
         public override int PageSize => 100;
-        public override TimeSpan RateLimit => new TimeSpan(0);
+        // search requests can page up to 30 times per tier with no other pacing; avoid hammering Deezer's endpoint
+        public override TimeSpan RateLimit => TimeSpan.FromSeconds(1);
 
         private readonly IDeezerProxy _deezerProxy;
 
