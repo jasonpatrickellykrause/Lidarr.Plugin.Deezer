@@ -24,19 +24,31 @@ This requires your Lidarr setup to be using the `plugins` branch. My docker-comp
 
 1. In Lidarr, go to `System -> Plugins`, paste `https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer` into the GitHub URL box, and press Install.
 2. Go into the Indexer settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
-3. If you have a specific ARL you want to use, paste it into the box, if you don't, the plugin will automatically pick one for you. Then press Save. It will load for awhile as it performs a lot of calls to Deezer.
+3. Paste your Deezer ARL into the Arl box and press Save. It will load for a while as it makes several calls to Deezer. After saving, the ARL is masked, and the Saved Arl field shows its last four characters so you can compare it with a new one.
 4. Go into the Download Client settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
 5. Put the path you want to download tracks to and fill out the other settings to your choosing.
    - If you want `.lrc` files to be saved, go into the Media Management settings and enable Import Extra Files and add `lrc` to the list.
 6. Go into the Profile settings and find the Delay Profiles. On each (by default there is only one), click the wrench on the right and toggle Deezer on.
 7. Optional: To prevent Lidarr from downloading all track files into the base artist folder rather than into their own separate album folder, go into the Media Management settings and enable Rename Tracks. You can change the formats to your liking, but it helps to let each album have their own folder.
 
+## Switching from another Deezer plugin
+Only one copy of a Deezer plugin can be installed. Two copies (for example TrevTV's plugin and this fork) define the same indexer and download client, and Lidarr then fails with `Sequence contains more than one matching element` in the logs. This plugin shows a health check error on the System > Status page when it finds more than one copy.
+
+To switch from TrevTV's plugin:
+1. Back up Lidarr (System > Backup > Backup Now).
+2. In System > Plugins, uninstall the TrevTV Deezer plugin, then restart Lidarr.
+3. Install this plugin from `https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer`, then restart Lidarr again.
+
+Your Deezer indexer and download client settings are kept in Lidarr's database, so you don't need to add them again.
+
+If you installed this fork's 10.1.0.1 release, the uninstall button can't remove it, because that build reports TrevTV as its owner. Remove its folder manually instead:
+1. Stop Lidarr.
+2. Delete the `Lidarr.Plugin.Deezer` folder under `plugins/jasonpatrickellykrause/` in Lidarr's data folder. That's `/var/lib/lidarr/plugins` for a native Linux install, or `/config/plugins` in Docker.
+3. Start Lidarr and install the current release.
+
 ## Licensing
 All of these libraries have been merged into the final plugin assembly due to (what I believe is) a bug in Lidarr's plugin system.
 - [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) is licensed under the MIT license. See [LICENSE](https://github.com/JamesNK/Newtonsoft.Json/blob/master/LICENSE.md) for the full license.
 - [BouncyCastle.Cryptography](https://github.com/bcgit/bc-csharp) is licensed under the MIT license. See [LICENSE](https://github.com/bcgit/bc-csharp/blob/master/LICENSE.md) for the full license.
 - [TagLibSharp](https://github.com/mono/taglib-sharp) is licensed under the LGPL-2.1 license. See [COPYING](https://github.com/mono/taglib-sharp/blob/main/COPYING) for the full license.
-- [AngleSharp](https://github.com/AngleSharp/AngleSharp) is licensed under the MIT license. See [LICENSE](https://github.com/AngleSharp/AngleSharp/blob/devel/LICENSE) for the full license.
-- [AngleSharp.XPath](https://github.com/AngleSharp/AngleSharp.XPath) is licensed under the MIT license. See [LICENSE](https://github.com/AngleSharp/AngleSharp.XPath/blob/master/LICENSE) for the full license.
-- [DeezNET](https://github.com/TrevTV/DeezNET) is licensed under the GPL-3.0 license. See [LICENSE](https://github.com/TrevTV/DeezNET/blob/main/LICENSE) for the full license.
-- [SkiaSharp](https://github.com/mono/SkiaSharp) is licensed under the MIT license. See [LICENSE](https://github.com/mono/SkiaSharp/blob/main/LICENSE.md) for the full license.
+- [DeezNET](https://github.com/jasonpatrickellykrause/DeezNET) (a fork of [TrevTV/DeezNET](https://github.com/TrevTV/DeezNET)) is licensed under the GPL-3.0 license. See [LICENSE](https://github.com/jasonpatrickellykrause/DeezNET/blob/main/LICENSE) for the full license.
