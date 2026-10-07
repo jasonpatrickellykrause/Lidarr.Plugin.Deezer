@@ -53,7 +53,7 @@ namespace NzbDrone.Core.Indexers.Deezer
             var albumId = long.Parse(result.AlbumId, CultureInfo.InvariantCulture);
             var albumPage = await DeezerRequestPacer.RunAsync(() => DeezerAPI.Instance.Client.GWApi.GetAlbumPage(albumId));
 
-            var missing = albumPage["SONGS"]!["data"]!.Count(d => d["FILESIZE"]!.ToString() == "0");
+            var missing = albumPage["SONGS"]!["data"]!.Count(d => !IsAvailable(d));
             if (Settings.HideAlbumsWithMissing && missing > 0)
                 return null; // return null if missing any tracks
 
@@ -63,7 +63,7 @@ namespace NzbDrone.Core.Indexers.Deezer
 
             // the account allowing a format doesn't mean the album has it; only offer a format every available track has,
             // otherwise the grab fails partway through with NoSourcesAvailableException
-            var availableSongs = albumPage["SONGS"]!["data"]!.Where(d => d["FILESIZE"]!.ToString() != "0").ToList();
+            var availableSongs = albumPage["SONGS"]!["data"]!.Where(IsAvailable).ToList();
             var all320 = availableSongs.All(d => d["FILESIZE_MP3_320"]!.Value<long>() > 0);
             var allFlac = availableSongs.All(d => d["FILESIZE_FLAC"]!.Value<long>() > 0);
 
@@ -83,6 +83,24 @@ namespace NzbDrone.Core.Indexers.Deezer
             }
 
             return torrentInfos;
+        }
+
+        // Deezer can list a file size for a track it won't serve. Those tracks have an empty RIGHTS record, show as greyed out
+        // in the app, and fail to download with error 2002. A track without a RIGHTS field counts as available, so a response
+        // that leaves the field out changes nothing.
+        private static bool IsAvailable(JToken song)
+        {
+            if (song["FILESIZE"]?.ToString() == "0")
+                return false;
+
+            return song["RIGHTS"] switch
+            {
+                JObject rights => rights.Properties().Any(p => p.Name.EndsWith("_AVAILABLE", StringComparison.Ordinal)
+                                                              && p.Value.Type == JTokenType.Boolean
+                                                              && p.Value.Value<bool>()),
+                JArray rights => rights.Count > 0,
+                _ => true
+            };
         }
 
         private static ReleaseInfo ToReleaseInfo(DeezerGwAlbum x, int bitrate, long size)
