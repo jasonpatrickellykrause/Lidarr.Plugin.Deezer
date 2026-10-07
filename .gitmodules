@@ -1,7 +1,7 @@
 [submodule "ext/Lidarr"]
 	path = ext/Lidarr
 	url = https://github.com/Lidarr/Lidarr
-	branch = plugins
+	branch = develop
 [submodule "ext/DeezNET"]
 	path = ext/DeezNET
 	url = https://github.com/jasonpatrickellykrause/DeezNET
