@@ -50,7 +50,8 @@ namespace NzbDrone.Core.Indexers.Deezer
         {
             var torrentInfos = new List<ReleaseInfo>();
 
-            var albumPage = await DeezerAPI.Instance.Client.GWApi.GetAlbumPage(long.Parse(result.AlbumId, CultureInfo.InvariantCulture));
+            var albumId = long.Parse(result.AlbumId, CultureInfo.InvariantCulture);
+            var albumPage = await DeezerRequestPacer.RunAsync(() => DeezerAPI.Instance.Client.GWApi.GetAlbumPage(albumId));
 
             var missing = albumPage["SONGS"]!["data"]!.Count(d => d["FILESIZE"]!.ToString() == "0");
             if (Settings.HideAlbumsWithMissing && missing > 0)
@@ -186,7 +187,7 @@ namespace NzbDrone.Core.Indexers.Deezer
             await Task.WhenAll(recent.Select(async album =>
             {
                 var id = album["ALB_ID"]!.Value<long>();
-                var result = await DeezerAPI.Instance.Client.GWApi.GetAlbumPage(id);
+                var result = await DeezerRequestPacer.RunAsync(() => DeezerAPI.Instance.Client.GWApi.GetAlbumPage(id));
 
                 var duration = result["SONGS"]!.Sum(track => track.Contains("DURATION") ? track["DURATION"]!.Value<long>() : 0L);
                 var trackCount = result["SONGS"]!.Count();
@@ -211,7 +212,7 @@ namespace NzbDrone.Core.Indexers.Deezer
 
         private async Task<JToken[]> GetChannelNewReleases(string channelName)
         {
-            var channelData = await DeezerAPI.Instance.Client.GWApi.GetPage(channelName);
+            var channelData = await DeezerRequestPacer.RunAsync(() => DeezerAPI.Instance.Client.GWApi.GetPage(channelName));
             Regex regex = new("New.*releases");
 
             var newReleasesSection = (JObject)channelData["sections"]!.FirstOrDefault(s => regex.IsMatch(s["title"]!.ToString()))!;
@@ -220,7 +221,7 @@ namespace NzbDrone.Core.Indexers.Deezer
 
             if (newReleasesSection.ContainsKey("target"))
             {
-                var showAll = await DeezerAPI.Instance.Client.GWApi.GetPage(newReleasesSection["target"]!.ToString());
+                var showAll = await DeezerRequestPacer.RunAsync(() => DeezerAPI.Instance.Client.GWApi.GetPage(newReleasesSection["target"]!.ToString()));
                 return showAll["sections"]!.First()!["items"]!.Select(i => i["data"]!).ToArray();
             }
 
