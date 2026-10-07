@@ -24,7 +24,7 @@ This requires your Lidarr setup to be using the `plugins` branch. My docker-comp
 
 1. In Lidarr, go to `System -> Plugins`, paste `https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer` into the GitHub URL box, and press Install.
 2. Go into the Indexer settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
-3. Paste your Deezer ARL into the Arl box and press Save. It will load for a while as it makes several calls to Deezer. After saving, the ARL is masked, and the Saved Arl field shows its last four characters so you can compare it with a new one.
+3. Paste your Deezer ARL into the ARL box and press Save. It will load for a while as it makes several calls to Deezer. After saving, the ARL is masked, and the Saved ARL field shows its last four characters so you can compare it with a new one.
 4. Go into the Download Client settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
 5. Put the path you want to download tracks to and fill out the other settings to your choosing.
    - If you want `.lrc` files to be saved, go into the Media Management settings and enable Import Extra Files and add `lrc` to the list.
