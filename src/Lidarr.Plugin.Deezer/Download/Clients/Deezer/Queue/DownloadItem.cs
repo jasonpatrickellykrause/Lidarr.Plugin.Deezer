@@ -76,10 +76,14 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
         public async Task DoDownload(DeezerSettings settings, Logger logger, CancellationToken cancellation = default)
         {
+            // check the ARL before the first track request rather than alongside it
+            EnsureValidity();
+
             List<Task> tasks = new();
             using SemaphoreSlim semaphore = new(1, 1);
             var isFirstTrack = true;
             var random = new Random();
+            InvalidARLException arlError = null;
             foreach (var (trackId, trackSize) in _tracks)
             {
                 tasks.Add(Task.Run(async () =>
@@ -87,6 +91,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     await semaphore.WaitAsync(cancellation);
                     try
                     {
+                        // once the ARL is rejected every remaining track fails the same way, and each extra request risks getting it flagged
+                        if (arlError != null)
+                        {
+                            FailedTracks++;
+                            return;
+                        }
+
                         // pace requests to Deezer; hammering it back to back is a known way to get an ARL invalidated
                         if (!isFirstTrack && settings.DownloadDelay > 0)
                         {
@@ -99,6 +110,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                         DownloadedSize += trackSize;
                     }
                     catch (TaskCanceledException) { }
+                    catch (InvalidARLException ex)
+                    {
+                        arlError = ex;
+                        logger.Error($"Deezer rejected the ARL while downloading track {trackId}. Skipping the remaining tracks in {Title}.");
+                        logger.Error(ex.ToString());
+                        FailedTracks++;
+                    }
                     catch (Exception ex)
                     {
                         logger.Error("Error while downloading Deezer track " + trackId);
@@ -144,7 +162,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             if (!Directory.Exists(outDir))
                 Directory.CreateDirectory(outDir);
 
-            await DeezerAPI.Instance.Client.Downloader.WriteRawTrackToFile(track, outPath, Bitrate, null, cancellation);
+            Bitrate? fallback = settings.FallbackToLowerBitrate ? Downloader.GetLowerFallbackBitrate(Bitrate) : null;
+            await DeezerAPI.Instance.Client.Downloader.WriteRawTrackToFile(track, outPath, Bitrate, fallback, cancellation);
+
+            // the path was built for the requested bitrate, but a fallback may have returned a different format
+            if (fallback != null)
+                outPath = CorrectExtension(outPath);
 
             var plainLyrics = string.Empty;
             List<SyncLyrics> syncLyrics = null;
@@ -224,6 +247,21 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             Artist = album.ArtistName;
             Explicit = album.Explicit;
             TotalSize = _tracks.Sum(t => t.size);
+        }
+
+        private static string CorrectExtension(string path)
+        {
+            var magic = new byte[4];
+            using (var stream = File.OpenRead(path))
+                stream.ReadExactly(magic);
+
+            var ext = magic.SequenceEqual("fLaC"u8.ToArray()) ? ".flac" : ".mp3";
+            if (string.Equals(Path.GetExtension(path), ext, StringComparison.OrdinalIgnoreCase))
+                return path;
+
+            var correctedPath = Path.ChangeExtension(path, ext);
+            File.Move(path, correctedPath, true);
+            return correctedPath;
         }
 
         private static async Task CreateLrcFile(string lrcFilePath, List<SyncLyrics> syncLyrics)

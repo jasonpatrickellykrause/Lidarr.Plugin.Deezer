@@ -51,8 +51,6 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             {
                 try
                 {
-                    var token = GetTokenForItem(item);
-                    item.EnsureValidity();
                     item.Status = DownloadItemStatus.Downloading;
                     await task;
                 }

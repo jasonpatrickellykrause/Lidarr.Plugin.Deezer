@@ -30,6 +30,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer
         [FieldDefinition(3, Label = "Download Delay", Unit = "ms", HelpText = "Minimum delay between track downloads. Deezer has been known to invalidate ARLs that are used to make requests in rapid succession; a small delay makes the traffic pattern look less automated. A random amount of jitter (up to half this value) is added on top.", Type = FieldType.Number, Advanced = true)]
         public int DownloadDelay { get; set; } = 1500;
 
+        [FieldDefinition(4, Label = "Fall Back to Lower Quality", HelpText = "If a track is not available at the grabbed quality, download it at the next lower quality instead of failing it. Lidarr reads the actual quality from the files on import, so a FLAC grab can import as MP3 320.", Type = FieldType.Checkbox, Advanced = true)]
+        public bool FallbackToLowerBitrate { get; set; } = false;
+
         public NzbDroneValidationResult Validate()
         {
             return new NzbDroneValidationResult(Validator.Validate(this));

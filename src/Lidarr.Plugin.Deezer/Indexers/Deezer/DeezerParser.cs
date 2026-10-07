@@ -60,17 +60,23 @@ namespace NzbDrone.Core.Indexers.Deezer
             var size320 = albumPage["SONGS"]!["data"]!.Sum(d => d["FILESIZE_MP3_320"]!.Value<long>());
             var sizeFlac = albumPage["SONGS"]!["data"]!.Sum(d => d["FILESIZE_FLAC"]!.Value<long>());
 
+            // the account allowing a format doesn't mean the album has it; only offer a format every available track has,
+            // otherwise the grab fails partway through with NoSourcesAvailableException
+            var availableSongs = albumPage["SONGS"]!["data"]!.Where(d => d["FILESIZE"]!.ToString() != "0").ToList();
+            var all320 = availableSongs.All(d => d["FILESIZE_MP3_320"]!.Value<long>() > 0);
+            var allFlac = availableSongs.All(d => d["FILESIZE_FLAC"]!.Value<long>() > 0);
+
             // MP3 128
             torrentInfos.Add(ToReleaseInfo(result, 1, size128));
 
             // MP3 320
-            if (DeezerAPI.Instance.Client.GWApi.ActiveUserData["USER"]!["OPTIONS"]!["web_hq"]!.Value<bool>())
+            if (all320 && DeezerAPI.Instance.Client.GWApi.ActiveUserData["USER"]!["OPTIONS"]!["web_hq"]!.Value<bool>())
             {
                 torrentInfos.Add(ToReleaseInfo(result, 3, size320));
             }
 
             // FLAC
-            if (DeezerAPI.Instance.Client.GWApi.ActiveUserData["USER"]!["OPTIONS"]!["web_lossless"]!.Value<bool>())
+            if (allFlac && DeezerAPI.Instance.Client.GWApi.ActiveUserData["USER"]!["OPTIONS"]!["web_lossless"]!.Value<bool>())
             {
                 torrentInfos.Add(ToReleaseInfo(result, 9, sizeFlac));
             }
