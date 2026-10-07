@@ -6,7 +6,16 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
+  # also keeps the SHA-pinned actions current
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+
+  # picks up new DeezNET commits; ext/Lidarr is left out because a Lidarr bump can change the minimum supported version
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: ext/DeezNET

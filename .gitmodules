@@ -5,4 +5,4 @@
 [submodule "ext/DeezNET"]
 	path = ext/DeezNET
 	url = https://github.com/jasonpatrickellykrause/DeezNET
-	branch = fix/arl-resilience
+	branch = main

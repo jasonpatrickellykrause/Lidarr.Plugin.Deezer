@@ -1,54 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading.Tasks;
-using AngleSharp.Dom;
-using AngleSharp.Html.Parser;
-using AngleSharp.XPath;
-
 namespace NzbDrone.Plugin.Deezer
 {
     public static class ARLUtilities
     {
-        private const string FIREHAWK_URL = "https://rentry.org/firehawk52";
-
-        public static async Task<string> GetFirstValidARL()
-        {
-            using HttpClient client = new();
-            var html = await client.GetStringAsync(FIREHAWK_URL);
-
-            var parser = new HtmlParser();
-            var document = await parser.ParseDocumentAsync(html);
-
-            var deezerTitleNode = (IElement)document.Body.SelectSingleNode("//*[@id=\"deezer-arls\"]");
-
-            var tableNode = deezerTitleNode.NextElementSibling;
-            while (tableNode != null && tableNode.GetAttribute("class") != "ntable-wrapper")
-                tableNode = tableNode.NextElementSibling;
-
-            if (tableNode == null)
-                return "";
-            else
-                tableNode = (IElement)tableNode.SelectSingleNode("table/tbody");
-
-            List<string> arls = new();
-            foreach (var row in tableNode.ChildNodes)
-            {
-                if (row is IElement elementRow)
-                {
-                    var tokenElement = elementRow.QuerySelector("td:nth-child(4) code");
-                    var token = tokenElement?.TextContent;
-                    if (token != null)
-                    {
-                        if (IsValid(token))
-                            return token;
-                    }
-                }
-            }
-
-            return "";
-        }
-
         public static bool IsValid(string token)
         {
             if (string.IsNullOrWhiteSpace(token))
@@ -73,6 +26,18 @@ namespace NzbDrone.Plugin.Deezer
 
 
             return true;
+        }
+
+        /// <summary>
+        /// Returns the last four characters of an ARL, so a saved ARL can be compared with a new one without exposing it.
+        /// </summary>
+        public static string GetHint(string arl)
+        {
+            if (string.IsNullOrWhiteSpace(arl))
+                return "";
+
+            var trimmed = arl.Trim();
+            return trimmed.Length <= 4 ? "****" : "****" + trimmed[^4..];
         }
     }
 }
