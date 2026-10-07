@@ -41,8 +41,12 @@ namespace NzbDrone.Plugin.Deezer.HealthChecks
             var message = $"The Deezer plugin is installed {folders.Count} times, which breaks indexers and download clients. " +
                           $"Stop Lidarr, delete all but one of these folders, then start Lidarr: {string.Join(", ", folders)}";
 
-            return new HealthCheck(GetType(), HealthCheckResult.Error, message)
+            // only HealthCheck(Type) and the setters exist in every Lidarr version; 3.1.5 replaced the
+            // (Type, HealthCheckResult, string, string) constructor with one that takes a HealthCheckReason
+            return new HealthCheck(GetType())
             {
+                Type = HealthCheckResult.Error,
+                Message = message,
                 WikiUrl = new HttpUri($"{new DeezerPlugin().GithubUrl}#switching-from-another-deezer-plugin")
             };
         }
