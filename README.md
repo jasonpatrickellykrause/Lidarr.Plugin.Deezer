@@ -22,7 +22,7 @@ This requires your Lidarr setup to be using the `plugins` branch. My docker-comp
     restart: unless-stopped
 ```
 
-1. In Lidarr, go to `System -> Plugins`, paste `https://github.com/TrevTV/Lidarr.Plugin.Deezer` into the GitHub URL box, and press Install.
+1. In Lidarr, go to `System -> Plugins`, paste `https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer` into the GitHub URL box, and press Install.
 2. Go into the Indexer settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
 3. If you have a specific ARL you want to use, paste it into the box, if you don't, the plugin will automatically pick one for you. Then press Save. It will load for awhile as it performs a lot of calls to Deezer.
 4. Go into the Download Client settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).

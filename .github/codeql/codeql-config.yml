@@ -1,0 +1,13 @@
+name: Plugin CodeQL config
+
+# security-extended adds lower-precision security queries on top of the defaults
+queries:
+  - uses: security-extended
+
+# scan the plugin and the DeezNET library it ships; ext/Lidarr is upstream code we don't change
+paths:
+  - src
+  - ext/DeezNET/DeezNET
+paths-ignore:
+  - ext/Lidarr
+  - ext/DeezNET/DeezNET.Tests
