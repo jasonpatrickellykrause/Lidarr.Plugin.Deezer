@@ -20,7 +20,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 {
     public class DownloadItem
     {
-        public MusicBrainzIds? MusicBrainzIds { get; private set; }
+        public MusicBrainzIds MusicBrainzIds { get; private set; }
 
         public static async Task<DownloadItem> From(RemoteAlbum remoteAlbum)
         {
@@ -44,9 +44,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     Bitrate = bitrate,
                     RemoteAlbum = remoteAlbum,
                     _deezerUrl = deezerUrl,
-                    MusicBrainzIds = ExtractMusicBrainzIds(remoteAlbum),
                 };
 
+                item.SetMusicBrainzIds(remoteAlbum);
                 await item.SetDeezerData();
             }
 
@@ -73,6 +73,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         public int FailedTracks { get; private set; }
 
         private (long id, long size)[] _tracks;
+        private string[] _recordingIds;
         private DeezerURL _deezerUrl;
         private JToken _deezerAlbum;
         private DateTime _lastARLValidityCheck = DateTime.MinValue;
@@ -196,7 +197,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 }
             }
 
-            await DeezerAPI.Instance.Client.Downloader.ApplyMetadataToFile(track, outPath, 512, plainLyrics, MusicBrainzIds, cancellation);
+            await DeezerAPI.Instance.Client.Downloader.ApplyMetadataToFile(track, outPath, 512, plainLyrics, GetMusicBrainzIdsForTrack(track), cancellation);
 
             if (syncLyrics != null)
                 await CreateLrcFile(Path.Combine(outDir, MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", "lrc", page, _deezerAlbum)), syncLyrics);
@@ -278,53 +279,50 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             await File.WriteAllTextAsync(lrcFilePath, lrcContent.ToString());
         }
 
-        private static MusicBrainzIds ExtractMusicBrainzIds(RemoteAlbum remoteAlbum)
+        private void SetMusicBrainzIds(RemoteAlbum remoteAlbum)
         {
-            if (remoteAlbum == null || remoteAlbum.Artist == null || remoteAlbum.Albums == null || !remoteAlbum.Albums.Any())
-            {
-                return null;
-            }
+            // an empty set (rather than null) tells DeezNET not to fall back to a blind MusicBrainz search,
+            // since a guessed release ID would mislead Lidarr's import matching
+            MusicBrainzIds = new MusicBrainzIds();
 
-            var album = remoteAlbum.Albums[0];
-
-            // Find the monitored release
-            var monitoredRelease = album.AlbumReleases?.Value?.FirstOrDefault(r => r.Monitored);
-            if (monitoredRelease == null)
+            try
             {
-                // Fallback: no monitored release, can't extract ReleaseId or TrackRecordingIds
-                return new MusicBrainzIds
+                if (remoteAlbum?.Artist == null || remoteAlbum.Albums == null || !remoteAlbum.Albums.Any())
+                    return;
+
+                var album = remoteAlbum.Albums[0];
+                var monitoredRelease = album.AlbumReleases?.Value?.FirstOrDefault(r => r.Monitored);
+
+                MusicBrainzIds = new MusicBrainzIds
                 {
                     ArtistId = remoteAlbum.Artist.ForeignArtistId,
                     ReleaseGroupId = album.ForeignAlbumId,
-                    ReleaseId = null,
-                    ReleaseArtistId = null,
-                    TrackRecordingIds = null
+                    ReleaseId = monitoredRelease?.ForeignReleaseId,
+                    ReleaseArtistId = monitoredRelease != null ? album.Artist?.Value?.ForeignArtistId : null,
                 };
-            }
 
-            // Extract TrackRecordingIds from the monitored release's tracks
-            Dictionary<int, string>? trackRecordingIds = null;
-            var tracks = monitoredRelease.Tracks?.Value;
-            if (tracks != null && tracks.Any())
-            {
-                trackRecordingIds = new Dictionary<int, string>();
-                foreach (var track in tracks)
-                {
-                    if (track.AbsoluteTrackNumber > 0 && !string.IsNullOrEmpty(track.ForeignRecordingId))
-                    {
-                        trackRecordingIds[track.AbsoluteTrackNumber] = track.ForeignRecordingId;
-                    }
-                }
+                // ordered across discs so they line up with Deezer's album track order
+                _recordingIds = monitoredRelease?.Tracks?.Value?
+                    .OrderBy(t => t.AbsoluteTrackNumber)
+                    .Select(t => t.ForeignRecordingId)
+                    .ToArray();
             }
-
-            return new MusicBrainzIds
+            catch (Exception)
             {
-                ArtistId = remoteAlbum.Artist.ForeignArtistId,
-                ReleaseGroupId = album.ForeignAlbumId,
-                ReleaseId = monitoredRelease.ForeignReleaseId,
-                ReleaseArtistId = album.Artist?.Value?.ForeignArtistId,
-                TrackRecordingIds = trackRecordingIds
-            };
+                // tagging is best-effort; never fail the grab over it
+            }
+        }
+
+        private MusicBrainzIds GetMusicBrainzIdsForTrack(long trackId)
+        {
+            // only trust a position match when Deezer and the Lidarr release have the same number of tracks;
+            // otherwise leave the recording ID out and let Lidarr match the track itself
+            string recordingId = null;
+            var index = Array.FindIndex(_tracks, t => t.id == trackId);
+            if (_recordingIds != null && _recordingIds.Length == _tracks.Length && index >= 0)
+                recordingId = _recordingIds[index];
+
+            return MusicBrainzIds with { RecordingId = recordingId };
         }
     }
 }
