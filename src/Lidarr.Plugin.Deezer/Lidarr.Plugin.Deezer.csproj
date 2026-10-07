@@ -13,6 +13,11 @@
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!-- CI passes -p:PluginRepository=owner/repo so Plugin.cs reports the repository the release actually comes from -->
+  <ItemGroup Condition="'$(PluginRepository)' != ''">
+    <AssemblyMetadata Include="PluginRepository" Value="$(PluginRepository)" />
+  </ItemGroup>
+
   <!-- fail on high or critical package advisories, including transitive ones, even when other warnings are allowed -->
   <PropertyGroup>
     <NuGetAudit>true</NuGetAudit>
