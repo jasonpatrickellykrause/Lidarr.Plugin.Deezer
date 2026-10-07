@@ -3,6 +3,18 @@ This plugin provides a Deezer indexer and downloader client for Lidarr using dir
 
 ### ⚠️ WARNING: Deezer seems to be cracking down on downloading tools and this wasn't designed super well for that, I've made minor changes to try to improve it, but there's still no guarantee you won't be limited or banned. ⚠️
 
+## About this fork
+This is a fork of [TrevTV/Lidarr.Plugin.Deezer](https://github.com/TrevTV/Lidarr.Plugin.Deezer). The upstream plugin's last release was 10.1.0.18 in November 2025, and its maintainer isn't merging pull requests. This fork fixes problems that cost users their ARLs or left them with failed downloads, and protects the ARL in Lidarr's interface.
+
+The main differences from upstream:
+- **ARL protection:** Lidarr masks the ARL in its interface and API, and a Saved ARL field shows only its last four characters.
+- **Gentler on your account:** the plugin paces track downloads and search lookups, stops an album as soon as Deezer rejects the ARL, and no longer retries a dead session without limit.
+- **Fewer failed grabs:** search results only offer FLAC or MP3 320 when every track on the album is available at that quality.
+- **MusicBrainz tagging:** downloaded files carry the release, artist, and recording IDs Lidarr matched, which helps imports.
+- **Maintained dependencies:** the plugin builds [a maintained fork of DeezNET](https://github.com/jasonpatrickellykrause/DeezNET) from source, and Dependabot, CodeQL, and signed build provenance cover both projects.
+
+You can't install this fork alongside TrevTV's plugin. See [Switching from another Deezer plugin](#switching-from-another-deezer-plugin).
+
 ## Installation
 This requires your Lidarr setup to be using the `plugins` branch. My docker-compose is setup like the following.
 ```yml
@@ -45,6 +57,48 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 1. Stop Lidarr.
 2. Delete the `Lidarr.Plugin.Deezer` folder under `plugins/jasonpatrickellykrause/` in Lidarr's data folder. That's `/var/lib/lidarr/plugins` for a native Linux install, or `/config/plugins` in Docker.
 3. Start Lidarr and install the current release.
+
+## Changelog
+Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
+
+### 10.2.0.15
+- Each release tag now points at the commit CI built, and releases publish one at a time so each changelog is complete. No change to the plugin itself.
+
+### 10.2.0.13
+- After a search, the plugin looks up each album at most two at a time with a short pause, instead of sending a whole page of lookups to Deezer at once.
+
+### 10.2.0.12
+- The indexer fields read **ARL** and **Saved ARL**, and Saved ARL sits directly below ARL.
+
+### 10.2.0.9
+- The plugin reports the repository CI built it from, so updating and uninstalling from **System** > **Plugins** use the right folder. Forks get this automatically.
+- A health check reports an error on **System** > **Status** when it finds more than one installed copy of the plugin, and lists each folder.
+
+### 10.2.0.7
+- Lidarr masks the ARL in its interface and API. A new Saved ARL field shows its last four characters.
+- Removed the code that downloaded shared ARLs from a public web page.
+- Removed unused packages from the plugin: AngleSharp, AngleSharp.XPath, and a SkiaSharp preview build.
+- Builds fail on high or critical NuGet advisories. CI runs DeezNET's decryption tests, pins its actions to commit SHAs, and attests build provenance. Verify a release with `gh attestation verify Lidarr.Plugin.Deezer.net8.0.zip --repo jasonpatrickellykrause/Lidarr.Plugin.Deezer`.
+- Dependabot updates the DeezNET submodule.
+
+### 10.2.0.5
+First release of this fork. Compared with TrevTV's 10.1.0.18:
+
+**ARL and account safety**
+- A rejected ARL now fails the validity check. Before, the check passed for any ARL.
+- The plugin checks the ARL before downloading, and stops requesting an album's remaining tracks once Deezer rejects the ARL.
+- Downloads pause between tracks (**Download Delay**, 1.5 seconds by default, with random extra time), and the indexer waits 1 second between search requests.
+
+**Downloads**
+- Search results only offer FLAC or MP3 320 when every available track on the album has a file at that quality. Before, the plugin offered FLAC for albums Deezer can't serve in FLAC, and every track failed with `NoSourcesAvailableException`.
+- New advanced download client option, **Fall Back to Lower Quality** (off by default), downloads the next lower quality when a track isn't available at the grabbed one.
+- Includes DeezNET 1.2.3. It fixes stale bytes at the end of decrypted tracks and limits session retries. See the [DeezNET changelog](https://github.com/jasonpatrickellykrause/DeezNET#changelog).
+
+**Tagging**
+- Downloaded files get MusicBrainz release, release group, artist, and recording IDs from the album Lidarr matched. Based on [TrevTV/Lidarr.Plugin.Deezer#27](https://github.com/TrevTV/Lidarr.Plugin.Deezer/pull/27) by jtstothard, with recording IDs matched by track position so multi-disc albums tag correctly.
+
+**Releases**
+- Versions start at 10.2.0 so they sort above TrevTV's 10.1.0.x, and releases publish automatically instead of as drafts.
 
 ## Licensing
 All of these libraries have been merged into the final plugin assembly due to (what I believe is) a bug in Lidarr's plugin system.
