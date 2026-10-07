@@ -61,6 +61,10 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.19
+- **Hide Albums With Missing Tracks** now also catches tracks that Deezer lists but won't serve, which show as greyed out in the Deezer app. Before, albums with such a track were offered, grabbed, and failed on that track with error 2002.
+- Merges that only change documentation or CI configuration no longer publish a release.
+
 ### 10.2.0.15
 - Each release tag now points at the commit CI built, and releases publish one at a time so each changelog is complete. No change to the plugin itself.
 
