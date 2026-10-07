@@ -13,14 +13,19 @@
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!-- fail on high or critical package advisories, including transitive ones, even when other warnings are allowed -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>high</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="AngleSharp" Version="1.2.0-beta.431" />
-    <PackageReference Include="AngleSharp.XPath" Version="2.0.4" />
     <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.34.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="SkiaSharp" Version="3.0.0-preview.4.1" />
   </ItemGroup>
 
   <ItemGroup>

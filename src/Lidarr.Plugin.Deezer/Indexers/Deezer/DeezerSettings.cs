@@ -1,6 +1,7 @@
 using FluentValidation;
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Validation;
+using NzbDrone.Plugin.Deezer;
 
 namespace NzbDrone.Core.Indexers.Deezer
 {
@@ -12,8 +13,18 @@ namespace NzbDrone.Core.Indexers.Deezer
     {
         private static readonly DeezerIndexerSettingsValidator Validator = new DeezerIndexerSettingsValidator();
 
-        [FieldDefinition(0, Label = "Arl", Type = FieldType.Textbox)]
+        // Password privacy makes Lidarr mask the ARL in the UI and API, and keep the stored value when the mask is saved back
+        [FieldDefinition(0, Label = "Arl", Type = FieldType.Password, Privacy = PrivacyLevel.Password)]
         public string Arl { get; set; } = "";
+
+        // Lidarr can only mask a whole field, so this shows the last four characters to compare a saved ARL with a new one.
+        // The setter ignores input; the value always comes from Arl.
+        [FieldDefinition(3, Label = "Saved Arl", HelpText = "Last four characters of the saved ARL, for comparing it with a new one. Editing this field has no effect.", Type = FieldType.Textbox, Hidden = HiddenType.HiddenIfNotSet)]
+        public string ArlHint
+        {
+            get => ARLUtilities.GetHint(Arl);
+            set { }
+        }
 
         [FieldDefinition(1, Label = "Hide Albums With Missing Tracks", HelpText = "If an album has any unavailable tracks on Deezer, they will not be provided when searching.", Type = FieldType.Checkbox)]
         public bool HideAlbumsWithMissing { get; set; } = true;
