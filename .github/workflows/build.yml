@@ -67,6 +67,10 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # create releases one at a time so each changelog starts from the previous release's tag
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
       # for the build provenance attestation
@@ -99,6 +103,8 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.PLUGIN_VERSION }}
+          # tag the commit that was built; without this GitHub tags whatever main points to when the release is created
+          target_commitish: ${{ github.sha }}
           name: ${{ env.PLUGIN_VERSION }}
           body_path: changelog.txt
           # published, not draft: Lidarr only sees published releases
