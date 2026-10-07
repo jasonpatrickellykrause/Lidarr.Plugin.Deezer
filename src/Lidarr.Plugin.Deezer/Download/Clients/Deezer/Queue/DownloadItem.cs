@@ -20,6 +20,8 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 {
     public class DownloadItem
     {
+        public MusicBrainzIds MusicBrainzIds { get; private set; }
+
         public static async Task<DownloadItem> From(RemoteAlbum remoteAlbum)
         {
             string url = remoteAlbum.Release.DownloadUrl.Trim();
@@ -44,6 +46,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     _deezerUrl = deezerUrl,
                 };
 
+                item.SetMusicBrainzIds(remoteAlbum);
                 await item.SetDeezerData();
             }
 
@@ -70,16 +73,21 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         public int FailedTracks { get; private set; }
 
         private (long id, long size)[] _tracks;
+        private string[] _recordingIds;
         private DeezerURL _deezerUrl;
         private JToken _deezerAlbum;
         private DateTime _lastARLValidityCheck = DateTime.MinValue;
 
         public async Task DoDownload(DeezerSettings settings, Logger logger, CancellationToken cancellation = default)
         {
+            // check the ARL before the first track request rather than alongside it
+            EnsureValidity();
+
             List<Task> tasks = new();
             using SemaphoreSlim semaphore = new(1, 1);
             var isFirstTrack = true;
             var random = new Random();
+            InvalidARLException arlError = null;
             foreach (var (trackId, trackSize) in _tracks)
             {
                 tasks.Add(Task.Run(async () =>
@@ -87,6 +95,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     await semaphore.WaitAsync(cancellation);
                     try
                     {
+                        // once the ARL is rejected every remaining track fails the same way, and each extra request risks getting it flagged
+                        if (arlError != null)
+                        {
+                            FailedTracks++;
+                            return;
+                        }
+
                         // pace requests to Deezer; hammering it back to back is a known way to get an ARL invalidated
                         if (!isFirstTrack && settings.DownloadDelay > 0)
                         {
@@ -99,6 +114,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                         DownloadedSize += trackSize;
                     }
                     catch (TaskCanceledException) { }
+                    catch (InvalidARLException ex)
+                    {
+                        arlError = ex;
+                        logger.Error($"Deezer rejected the ARL while downloading track {trackId}. Skipping the remaining tracks in {Title}.");
+                        logger.Error(ex.ToString());
+                        FailedTracks++;
+                    }
                     catch (Exception ex)
                     {
                         logger.Error("Error while downloading Deezer track " + trackId);
@@ -144,7 +166,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             if (!Directory.Exists(outDir))
                 Directory.CreateDirectory(outDir);
 
-            await DeezerAPI.Instance.Client.Downloader.WriteRawTrackToFile(track, outPath, Bitrate, null, cancellation);
+            Bitrate? fallback = settings.FallbackToLowerBitrate ? Downloader.GetLowerFallbackBitrate(Bitrate) : null;
+            await DeezerAPI.Instance.Client.Downloader.WriteRawTrackToFile(track, outPath, Bitrate, fallback, cancellation);
+
+            // the path was built for the requested bitrate, but a fallback may have returned a different format
+            if (fallback != null)
+                outPath = CorrectExtension(outPath);
 
             var plainLyrics = string.Empty;
             List<SyncLyrics> syncLyrics = null;
@@ -170,7 +197,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 }
             }
 
-            await DeezerAPI.Instance.Client.Downloader.ApplyMetadataToFile(track, outPath, 512, plainLyrics, token: cancellation);
+            await DeezerAPI.Instance.Client.Downloader.ApplyMetadataToFile(track, outPath, 512, plainLyrics, GetMusicBrainzIdsForTrack(track), cancellation);
 
             if (syncLyrics != null)
                 await CreateLrcFile(Path.Combine(outDir, MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", "lrc", page, _deezerAlbum)), syncLyrics);
@@ -226,6 +253,21 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             TotalSize = _tracks.Sum(t => t.size);
         }
 
+        private static string CorrectExtension(string path)
+        {
+            var magic = new byte[4];
+            using (var stream = File.OpenRead(path))
+                stream.ReadExactly(magic);
+
+            var ext = magic.SequenceEqual("fLaC"u8.ToArray()) ? ".flac" : ".mp3";
+            if (string.Equals(Path.GetExtension(path), ext, StringComparison.OrdinalIgnoreCase))
+                return path;
+
+            var correctedPath = Path.ChangeExtension(path, ext);
+            File.Move(path, correctedPath, true);
+            return correctedPath;
+        }
+
         private static async Task CreateLrcFile(string lrcFilePath, List<SyncLyrics> syncLyrics)
         {
             StringBuilder lrcContent = new();
@@ -235,6 +277,52 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     lrcContent.AppendLine(CultureInfo.InvariantCulture, $"{lyric.LrcTimestamp} {lyric.Line}");
             }
             await File.WriteAllTextAsync(lrcFilePath, lrcContent.ToString());
+        }
+
+        private void SetMusicBrainzIds(RemoteAlbum remoteAlbum)
+        {
+            // an empty set (rather than null) tells DeezNET not to fall back to a blind MusicBrainz search,
+            // since a guessed release ID would mislead Lidarr's import matching
+            MusicBrainzIds = new MusicBrainzIds();
+
+            try
+            {
+                if (remoteAlbum?.Artist == null || remoteAlbum.Albums == null || !remoteAlbum.Albums.Any())
+                    return;
+
+                var album = remoteAlbum.Albums[0];
+                var monitoredRelease = album.AlbumReleases?.Value?.FirstOrDefault(r => r.Monitored);
+
+                MusicBrainzIds = new MusicBrainzIds
+                {
+                    ArtistId = remoteAlbum.Artist.ForeignArtistId,
+                    ReleaseGroupId = album.ForeignAlbumId,
+                    ReleaseId = monitoredRelease?.ForeignReleaseId,
+                    ReleaseArtistId = monitoredRelease != null ? album.Artist?.Value?.ForeignArtistId : null,
+                };
+
+                // ordered across discs so they line up with Deezer's album track order
+                _recordingIds = monitoredRelease?.Tracks?.Value?
+                    .OrderBy(t => t.AbsoluteTrackNumber)
+                    .Select(t => t.ForeignRecordingId)
+                    .ToArray();
+            }
+            catch (Exception)
+            {
+                // tagging is best-effort; never fail the grab over it
+            }
+        }
+
+        private MusicBrainzIds GetMusicBrainzIdsForTrack(long trackId)
+        {
+            // only trust a position match when Deezer and the Lidarr release have the same number of tracks;
+            // otherwise leave the recording ID out and let Lidarr match the track itself
+            string recordingId = null;
+            var index = Array.FindIndex(_tracks, t => t.id == trackId);
+            if (_recordingIds != null && _recordingIds.Length == _tracks.Length && index >= 0)
+                recordingId = _recordingIds[index];
+
+            return MusicBrainzIds with { RecordingId = recordingId };
         }
     }
 }

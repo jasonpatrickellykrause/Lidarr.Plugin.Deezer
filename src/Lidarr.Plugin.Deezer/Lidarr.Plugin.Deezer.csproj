@@ -14,13 +14,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <AdditionalFiles Remove="E:\Projects\GitHub\Lidarr.Plugin.Deezer\src\stylecop.json" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.2.0-beta.431" />
     <PackageReference Include="AngleSharp.XPath" Version="2.0.4" />
-    <PackageReference Include="DeezNET" Version="1.2.1" />
     <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.34.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -31,10 +26,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\ext\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj" />
     <ProjectReference Include="..\..\ext\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj" />
+    <ProjectReference Include="..\..\ext\DeezNET\DeezNET\DeezNET.csproj" />
   </ItemGroup>
 	
-  <Target Name="PostBuild" AfterTargets="ILRepacker">
-    <Exec ContinueOnError="true" Command="COPY &quot;$(TargetPath)&quot; &quot;C:\ProgramData\Lidarr\plugins\TrevTV\Lidarr.Plugin.Deezer&quot;" />
+  <!-- opt in with -p:LidarrPluginDeployDir=C:\ProgramData\Lidarr\plugins\<owner>\Lidarr.Plugin.Deezer to copy builds into a local Lidarr -->
+  <Target Name="PostBuild" AfterTargets="ILRepacker" Condition="'$(LidarrPluginDeployDir)' != ''">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(LidarrPluginDeployDir)" ContinueOnError="true" />
   </Target>
 
 </Project>

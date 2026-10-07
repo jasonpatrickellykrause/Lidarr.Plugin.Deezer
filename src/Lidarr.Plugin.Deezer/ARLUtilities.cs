@@ -59,9 +59,11 @@ namespace NzbDrone.Plugin.Deezer
                 // calling this gets a checkForm/API token, it will always return one regardless of the arl being valid or not, requiring the additional checks
                 DeezerAPI.Instance.Client.SetARL(token).Wait();
 
-                bool accountActive = DeezerAPI.Instance.Client.GWApi.ActiveUserData!["USER"]!.Value<long>("USER_ID") == 0;
-                bool hasStreaming = DeezerAPI.Instance.Client.GWApi.ActiveUserData!["USER"]!["OPTIONS"]!.Value<bool>("web_streaming");
-                if (accountActive && hasStreaming)
+                // a rejected ARL still gets user data back, but for an anonymous session with USER_ID 0
+                var user = DeezerAPI.Instance.Client.GWApi.ActiveUserData!["USER"]!;
+                bool loggedIn = user.Value<long>("USER_ID") != 0;
+                bool hasStreaming = user["OPTIONS"]!.Value<bool>("web_streaming");
+                if (!loggedIn || !hasStreaming)
                     return false;
             }
             catch
