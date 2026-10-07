@@ -59,7 +59,7 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 3. Start Lidarr and install the current release.
 
 ## Changelog
-Each merge to `main` publishes a release. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
+Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
 ### 10.2.0.15
 - Each release tag now points at the commit CI built, and releases publish one at a time so each changelog is complete. No change to the plugin itself.

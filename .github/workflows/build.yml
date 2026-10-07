@@ -5,6 +5,12 @@ on:
       - main
     tags-ignore:
       - '**'
+    # no release when a merge only touches docs or CI config; the plugin is unchanged, so Lidarr users would get an
+    # update that does nothing. Pull requests still build, and a push that also changes code runs as normal.
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - '.github/**'
   pull_request:
   workflow_dispatch:
 
