@@ -8,8 +8,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# read-only by default; only the release job can write
 permissions:
-  contents: write
+  contents: read
 
 env:
   # Stop wasting time caching packages
@@ -17,7 +18,8 @@ env:
   # Disable sending usage data to Microsoft
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   PLUGIN_NAME: Lidarr.Plugin.Deezer
-  PLUGIN_VERSION: 10.1.0.${{ github.run_number }}
+  # 10.2 keeps this fork's versions above TrevTV's 10.1.0.x releases
+  PLUGIN_VERSION: 10.2.0.${{ github.run_number }}
   MINIMUM_LIDARR_VERSION: 3.0.0.4855
   DOTNET_VERSION: 8.0.405
 
@@ -29,13 +31,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
-          fetch-depth: 0
-          tags: true
       - name: Setup .NET Core
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Create global.json
@@ -55,31 +55,43 @@ jobs:
           dotnet restore src/*.sln -p:TreatWarningsAsErrors=false
           dotnet build src/*.sln -c Release -f ${{ matrix.framework }} -p:TreatWarningsAsErrors=false
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PLUGIN_NAME }}.${{ matrix.framework }}
           path: ./_plugins/net8.0/${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.*
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # full history and tags for the changelog
+          fetch-depth: 0
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.PLUGIN_NAME }}.net8.0
+          path: plugin
       - name: Generate Changelog
-        if: github.ref == 'refs/heads/main'
         run: |
           echo "Changelog:" > changelog.txt
           git log --oneline $(git describe --tags --abbrev=0)..HEAD | awk '{print "- " substr($0, index($0,$2))}' >> changelog.txt
-      - name: Display Changelog
-        if: github.ref == 'refs/heads/main'
-        run: cat changelog.txt
+          cat changelog.txt
       - name: Zip Plugin
-        if: github.ref == 'refs/heads/main'
-        run: |
-          sudo apt update && sudo apt install -y p7zip-full
-          7z a -tzip ${{ env.PLUGIN_NAME }}.net8.0.zip ./_plugins/net8.0/${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.*
+        run: zip -j ${{ env.PLUGIN_NAME }}.net8.0.zip plugin/${{ env.PLUGIN_NAME }}.*
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.PLUGIN_VERSION }}
           name: ${{ env.PLUGIN_VERSION }}
           body_path: changelog.txt
-          draft: true
+          # published, not draft: Lidarr only sees published releases
+          draft: false
           prerelease: false
           files: |
             ${{ env.PLUGIN_NAME }}.net8.0.zip
