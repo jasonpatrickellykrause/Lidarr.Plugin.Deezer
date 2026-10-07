@@ -105,12 +105,23 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ env.PLUGIN_NAME }}.net8.0.zip
+      - name: Tag the built commit
+        # create the tag here so it lands on the commit that was built, not wherever main points by the time the release
+        # is created; skipped on a re-run, when the tag already exists
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$PLUGIN_VERSION" > /dev/null; then
+            echo "Tag $PLUGIN_VERSION already exists"
+          else
+            git tag "$PLUGIN_VERSION" "$GITHUB_SHA"
+            git push origin "refs/tags/$PLUGIN_VERSION"
+          fi
       - name: Upload Release Asset
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.PLUGIN_VERSION }}
-          # tag the commit that was built; without this GitHub tags whatever main points to when the release is created
-          target_commitish: ${{ github.sha }}
+          # Lidarr only offers releases whose target_commitish is main or master; the tag already exists (previous step),
+          # so GitHub leaves it on the built commit and only records this branch name
+          target_commitish: main
           name: ${{ env.PLUGIN_VERSION }}
           body_path: changelog.txt
           # published, not draft: Lidarr only sees published releases
