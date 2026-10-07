@@ -61,6 +61,10 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.24
+- Fixed a `MissingMethodException` in the duplicate install health check on Lidarr 3.1.5 and later. The check failed every time Lidarr ran its health checks.
+- Releases target `main` again, so **System** > **Plugins** offers them as updates. Lidarr skipped 10.2.0.15 and 10.2.0.19 until their releases targeted `main`.
+
 ### 10.2.0.19
 - **Hide Albums With Missing Tracks** now also catches tracks that Deezer lists but won't serve, which show as greyed out in the Deezer app. Before, Lidarr could grab an album with such a track, and the download failed on that track with error 2002.
 - Merges that only change documentation or CI configuration no longer publish a release.
