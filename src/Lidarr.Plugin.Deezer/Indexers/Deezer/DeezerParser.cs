@@ -21,6 +21,9 @@ namespace NzbDrone.Core.Indexers.Deezer
     {
         public DeezerIndexerSettings Settings { get; set; }
 
+        // lets the ARL health check run as soon as a search finds the ARL dead
+        public Action OnArlRejected { get; set; }
+
         public IList<ReleaseInfo> ParseResponse(IndexerResponse response)
         {
             var torrentInfos = new List<ReleaseInfo>();
@@ -55,7 +58,7 @@ namespace NzbDrone.Core.Indexers.Deezer
 
         // A gw api error comes back as HTTP 200 with empty results, so it has to be checked here or it surfaces as a
         // null reference while parsing
-        private static DeezerSearchResponse ParseSearchResponse(IndexerResponse response)
+        private DeezerSearchResponse ParseSearchResponse(IndexerResponse response)
         {
             var json = JObject.Parse(response.Content);
             var error = json["error"];
@@ -71,7 +74,7 @@ namespace NzbDrone.Core.Indexers.Deezer
 
         // The request was built with a token Deezer no longer accepts. Refresh it and run the same page again through
         // DeezNET, which retries once more on its own before giving up on the ARL.
-        private static DeezerSearchResponse SearchWithFreshToken(IndexerResponse response)
+        private DeezerSearchResponse SearchWithFreshToken(IndexerResponse response)
         {
             var body = JObject.Parse(Encoding.UTF8.GetString(response.HttpRequest.ContentData));
             var query = body["query"]!.Value<string>();
@@ -89,7 +92,8 @@ namespace NzbDrone.Core.Indexers.Deezer
             }
             catch (InvalidARLException ex)
             {
-                throw new IndexerException(response, "Deezer rejected the session even after refreshing the API token. The ARL has probably expired; paste a new one into the Deezer indexer and download client settings. " + ex.Message);
+                OnArlRejected?.Invoke();
+                throw new IndexerException(response, "Deezer rejected the session even after refreshing the API token. The ARL has probably expired; paste a new one into the Deezer indexer settings. " + ex.Message);
             }
         }
 

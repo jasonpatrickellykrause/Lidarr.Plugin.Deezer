@@ -23,9 +23,11 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
         private DeezerSettings _settings;
         private readonly Logger _logger;
+        private readonly Action _onArlRejected;
 
-        public DownloadTaskQueue(int capacity, DeezerSettings settings, Logger logger)
+        public DownloadTaskQueue(int capacity, DeezerSettings settings, Logger logger, Action onArlRejected = null)
         {
+            _onArlRejected = onArlRejected;
             BoundedChannelOptions options = new(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait
@@ -54,6 +56,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 {
                     item.Status = DownloadItemStatus.Downloading;
                     await task;
+
+                    if (item.ArlRejected)
+                        _onArlRejected?.Invoke();
                 }
                 catch (TaskCanceledException) { }
                 catch (OperationCanceledException) { }
@@ -61,9 +66,10 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 {
                     // a bad ARL isn't the release's fault, so keep it out of Lidarr's failed handling and blocklist
                     item.Status = DownloadItemStatus.Warning;
-                    item.Message = "Deezer rejected the ARL before the download started. Replace the ARL in the Deezer download client, then remove this item and search again.";
+                    item.Message = "Deezer rejected the ARL before the download started. Replace the ARL in the Deezer indexer, then remove this item and search again.";
                     _logger.Error("Deezer rejected the ARL for album " + item.Title);
                     _logger.Error(ex.ToString());
+                    _onArlRejected?.Invoke();
                 }
                 catch (Exception ex)
                 {

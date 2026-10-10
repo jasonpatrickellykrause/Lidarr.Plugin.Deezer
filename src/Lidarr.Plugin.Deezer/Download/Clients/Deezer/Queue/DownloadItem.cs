@@ -69,6 +69,8 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         // shown in Lidarr's Activity queue next to a failed or warning item
         public string Message { get; set; }
 
+        public bool ArlRejected { get; private set; }
+
         public float Progress { get => DownloadedSize / (float)Math.Max(TotalSize, 1); }
         public long DownloadedSize { get; private set; }
         public long TotalSize { get; private set; }
@@ -142,8 +144,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             if (arlError != null)
             {
                 // not the release's fault, so don't let Lidarr blocklist it; a warning keeps it visible until the ARL is replaced
+                ArlRejected = true;
                 Status = DownloadItemStatus.Warning;
-                Message = $"Deezer rejected the ARL after {_tracks.Length - FailedTracks} of {_tracks.Length} tracks. Replace the ARL in the Deezer download client, then remove this item and search again.";
+                Message = $"Deezer rejected the ARL after {_tracks.Length - FailedTracks} of {_tracks.Length} tracks. Replace the ARL in the Deezer indexer, then remove this item and search again.";
             }
             else if (FailedTracks > 0)
             {

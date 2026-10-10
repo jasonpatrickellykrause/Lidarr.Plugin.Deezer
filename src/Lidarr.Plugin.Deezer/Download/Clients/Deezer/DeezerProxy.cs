@@ -8,7 +8,9 @@ using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Download.Clients.Deezer.Queue;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Plugin.Deezer.HealthChecks;
 
 namespace NzbDrone.Core.Download.Clients.Deezer
 {
@@ -24,10 +26,10 @@ namespace NzbDrone.Core.Download.Clients.Deezer
         private readonly ICached<DateTime?> _startTimeCache;
         private readonly DownloadTaskQueue _taskQueue;
 
-        public DeezerProxy(ICacheManager cacheManager, Logger logger)
+        public DeezerProxy(ICacheManager cacheManager, IEventAggregator eventAggregator, Logger logger)
         {
             _startTimeCache = cacheManager.GetCache<DateTime?>(GetType(), "startTimes");
-            _taskQueue = new(500, null, logger);
+            _taskQueue = new(500, null, logger, () => eventAggregator.PublishEvent(new DeezerArlRejectedEvent()));
 
             _taskQueue.StartQueueHandler();
         }
