@@ -1,0 +1,8 @@
+<Project>
+  <!-- CI imports this into every project with -p:CustomAfterMicrosoftCommonProps. Lidarr's own projects report the same package
+       advisories as the plugin, which audits them transitively (NuGetAuditMode=all) and keeps its suppressions in its csproj.
+       Auditing ext/Lidarr again only repeats those warnings in the build annotations. -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Replace('\', '/').Contains('/ext/Lidarr/'))">
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+</Project>
