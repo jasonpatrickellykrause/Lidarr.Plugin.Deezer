@@ -41,7 +41,10 @@ namespace NzbDrone.Core.Download.Clients.Deezer
             var queue = listing.Where(x => x.Status == DownloadItemStatus.Queued);
             var current = listing.Where(x => x.Status == DownloadItemStatus.Downloading);
 
-            var result = completed.Concat(current).Concat(queue).Where(x => x != null).Select(ToDownloadClientItem).ToList();
+            // failed items have to be reported, or Lidarr never blocklists the release, searches again, or removes the leftover files
+            var failed = listing.Where(x => x.Status == DownloadItemStatus.Failed || x.Status == DownloadItemStatus.Warning);
+
+            var result = completed.Concat(failed).Concat(current).Concat(queue).Where(x => x != null).Select(ToDownloadClientItem).ToList();
 
             return result;
         }
@@ -80,6 +83,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer
                 RemainingSize = x.TotalSize - x.DownloadedSize,
                 RemainingTime = GetRemainingTime(x),
                 Status = x.Status,
+                Message = x.Message,
                 CanMoveFiles = true,
                 CanBeRemoved = true,
             };
@@ -94,7 +98,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer
 
         private TimeSpan? GetRemainingTime(DownloadItem x)
         {
-            if (x.Status == DownloadItemStatus.Completed)
+            if (x.Status is DownloadItemStatus.Completed or DownloadItemStatus.Failed or DownloadItemStatus.Warning)
             {
                 _startTimeCache.Remove(x.ID);
                 return null;

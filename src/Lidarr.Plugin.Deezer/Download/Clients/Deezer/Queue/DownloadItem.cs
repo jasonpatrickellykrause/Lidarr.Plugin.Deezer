@@ -66,6 +66,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         public Bitrate Bitrate { get; private set; }
         public DownloadItemStatus Status { get; set; }
 
+        // shown in Lidarr's Activity queue next to a failed or warning item
+        public string Message { get; set; }
+
         public float Progress { get => DownloadedSize / (float)Math.Max(TotalSize, 1); }
         public long DownloadedSize { get; private set; }
         public long TotalSize { get; private set; }
@@ -135,10 +138,22 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
 
             await Task.WhenAll(tasks);
-            if (FailedTracks > 0)
+
+            if (arlError != null)
+            {
+                // not the release's fault, so don't let Lidarr blocklist it; a warning keeps it visible until the ARL is replaced
+                Status = DownloadItemStatus.Warning;
+                Message = $"Deezer rejected the ARL after {_tracks.Length - FailedTracks} of {_tracks.Length} tracks. Replace the ARL in the Deezer download client, then remove this item and search again.";
+            }
+            else if (FailedTracks > 0)
+            {
                 Status = DownloadItemStatus.Failed;
+                Message = $"{FailedTracks} of {_tracks.Length} tracks failed to download. The Lidarr log has the error for each track.";
+            }
             else
+            {
                 Status = DownloadItemStatus.Completed;
+            }
         }
 
         private async Task DoTrackDownload(long track, DeezerSettings settings, CancellationToken cancellation = default)
@@ -159,19 +174,25 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             var duration = page["DATA"]!["DURATION"]!.Value<int>();
 
             var ext = Bitrate == Bitrate.FLAC ? "flac" : "mp3";
-            var outPath = Path.Combine(settings.DownloadPath, MetadataUtilities.GetFilledTemplate("%albumartist%/%album%/", ext, page, _deezerAlbum), MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", ext, page, _deezerAlbum));
+            // one folder per requested quality, so a failed FLAC attempt never shares a folder with a later MP3 grab of the same album
+            var albumFolder = $"%albumartist%/%album% [{GetQualityLabel(Bitrate)}]/";
+            var outPath = Path.Combine(settings.DownloadPath, MetadataUtilities.GetFilledTemplate(albumFolder, ext, page, _deezerAlbum), MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", ext, page, _deezerAlbum));
             var outDir = Path.GetDirectoryName(outPath)!;
 
             DownloadFolder = outDir;
             if (!Directory.Exists(outDir))
                 Directory.CreateDirectory(outDir);
 
-            Bitrate? fallback = settings.FallbackToLowerBitrate ? Downloader.GetLowerFallbackBitrate(Bitrate) : null;
-            await DeezerAPI.Instance.Client.Downloader.WriteRawTrackToFile(track, outPath, Bitrate, fallback, cancellation);
-
-            // the path was built for the requested bitrate, but a fallback may have returned a different format
-            if (fallback != null)
-                outPath = CorrectExtension(outPath);
+            try
+            {
+                outPath = await WriteTrack(track, outPath, settings, cancellation);
+            }
+            catch
+            {
+                // a half-written or empty file would otherwise be picked up by a later import of this folder
+                DeletePartialFile(outPath);
+                throw;
+            }
 
             var plainLyrics = string.Empty;
             List<SyncLyrics> syncLyrics = null;
@@ -215,6 +236,40 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
             catch (UnavailableArtException) { } */
         }
+
+        private async Task<string> WriteTrack(long track, string outPath, DeezerSettings settings, CancellationToken cancellation)
+        {
+            Bitrate? fallback = settings.FallbackToLowerBitrate ? Downloader.GetLowerFallbackBitrate(Bitrate) : null;
+            await DeezerAPI.Instance.Client.Downloader.WriteRawTrackToFile(track, outPath, Bitrate, fallback, cancellation);
+
+            // the path was built for the requested bitrate, but a fallback may have returned a different format
+            if (fallback != null)
+                outPath = CorrectExtension(outPath);
+
+            return outPath;
+        }
+
+        private static void DeletePartialFile(string path)
+        {
+            // a fallback may already have renamed the file to the other extension
+            foreach (var candidate in new[] { path, Path.ChangeExtension(path, ".flac"), Path.ChangeExtension(path, ".mp3") }.Distinct())
+            {
+                try
+                {
+                    if (File.Exists(candidate))
+                        File.Delete(candidate);
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        private static string GetQualityLabel(Bitrate bitrate) => bitrate switch
+        {
+            Bitrate.FLAC => "FLAC",
+            Bitrate.MP3_320 => "MP3 320",
+            _ => "MP3 128"
+        };
 
         public void EnsureValidity()
         {
