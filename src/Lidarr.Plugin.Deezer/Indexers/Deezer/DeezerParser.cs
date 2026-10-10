@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using DeezNET.Exceptions;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Download.Clients.Deezer;
+using NzbDrone.Core.Indexers.Exceptions;
 using NzbDrone.Core.Parser.Model;
 using System.Collections.Concurrent;
 using NzbDrone.Plugin.Deezer;
@@ -29,7 +33,10 @@ namespace NzbDrone.Core.Indexers.Deezer
                 jsonResponse = task.Result;
             }
             else
-                jsonResponse = new HttpResponse<DeezerSearchResponseWrapper>(response.HttpResponse).Resource.Results;
+                jsonResponse = ParseSearchResponse(response);
+
+            if (jsonResponse?.Data == null)
+                return torrentInfos;
 
             var tasks = jsonResponse.Data.Select(result => ProcessResultAsync(result)).ToArray();
 
@@ -44,6 +51,46 @@ namespace NzbDrone.Core.Indexers.Deezer
             return torrentInfos
                 .OrderByDescending(o => o.Size)
                 .ToArray();
+        }
+
+        // A gw api error comes back as HTTP 200 with empty results, so it has to be checked here or it surfaces as a
+        // null reference while parsing
+        private static DeezerSearchResponse ParseSearchResponse(IndexerResponse response)
+        {
+            var json = JObject.Parse(response.Content);
+            var error = json["error"];
+
+            if (error == null || !error.HasValues)
+                return json["results"]?.ToObject<DeezerSearchResponse>();
+
+            if (error["VALID_TOKEN_REQUIRED"] != null || error["GATEWAY_ERROR"] != null)
+                return SearchWithFreshToken(response);
+
+            throw new IndexerException(response, "Deezer returned an error: " + error.ToString(Formatting.None));
+        }
+
+        // The request was built with a token Deezer no longer accepts. Refresh it and run the same page again through
+        // DeezNET, which retries once more on its own before giving up on the ARL.
+        private static DeezerSearchResponse SearchWithFreshToken(IndexerResponse response)
+        {
+            var body = JObject.Parse(Encoding.UTF8.GetString(response.HttpRequest.ContentData));
+            var query = body["query"]!.Value<string>();
+            var type = body["output"]!.Value<string>();
+            var start = body["start"]!.Value<int>();
+            var count = body["nb"]!.Value<int>();
+
+            try
+            {
+                DeezerAPI.Instance.RefreshToken();
+                var results = DeezerRequestPacer.RunAsync(() => DeezerAPI.Instance.Client.GWApi.SearchMusic(query, type, start, count))
+                    .GetAwaiter().GetResult();
+
+                return results.ToObject<DeezerSearchResponse>();
+            }
+            catch (InvalidARLException ex)
+            {
+                throw new IndexerException(response, "Deezer rejected the session even after refreshing the API token. The ARL has probably expired; paste a new one into the Deezer indexer and download client settings. " + ex.Message);
+            }
         }
 
         private async Task<IList<ReleaseInfo>> ProcessResultAsync(DeezerGwAlbum result)

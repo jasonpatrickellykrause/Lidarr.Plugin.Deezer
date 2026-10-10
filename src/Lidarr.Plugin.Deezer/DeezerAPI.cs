@@ -42,11 +42,15 @@ namespace NzbDrone.Plugin.Deezer
         internal void TryUpdateToken()
         {
             if ((DateTime.Now - _lastArlUpdate).TotalHours >= 24)
-            {
-                // refreshes the gw api token
-                _client.SetARL(_client.ActiveARL).Wait();
-                _lastArlUpdate = DateTime.Now;
-            }
+                RefreshToken();
+        }
+
+        // Deezer can drop the session behind the gw api token well before the 24 hour refresh, which makes every
+        // search fail with VALID_TOKEN_REQUIRED until something calls this
+        internal void RefreshToken()
+        {
+            _client.SetARL(_client.ActiveARL).Wait();
+            _lastArlUpdate = DateTime.Now;
         }
 
         public string GetGWUrl(string method, Dictionary<string, string> parameters = null)
