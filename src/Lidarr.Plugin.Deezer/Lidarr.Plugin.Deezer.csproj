@@ -33,6 +33,17 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- SixLabors.ImageSharp 3.1.12 comes from Lidarr.Core and is not merged into or shipped with the plugin; Lidarr provides it at
+       runtime. These advisories are fixed only in 4.1.2+, which needs a Six Labors license key to build, so they wait on Lidarr.
+       Remove these when ext/Lidarr moves to a patched ImageSharp. -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\ext\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj" />
     <ProjectReference Include="..\..\ext\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj" />
