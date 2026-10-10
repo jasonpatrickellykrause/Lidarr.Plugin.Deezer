@@ -25,9 +25,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer
     {
         private readonly ICached<DateTime?> _startTimeCache;
         private readonly DownloadTaskQueue _taskQueue;
+        private readonly IEventAggregator _eventAggregator;
+        private readonly IMissingEditionTracker _missingEditionTracker;
 
-        public DeezerProxy(ICacheManager cacheManager, IEventAggregator eventAggregator, Logger logger)
+        public DeezerProxy(ICacheManager cacheManager, IEventAggregator eventAggregator, IMissingEditionTracker missingEditionTracker, Logger logger)
         {
+            _eventAggregator = eventAggregator;
+            _missingEditionTracker = missingEditionTracker;
             _startTimeCache = cacheManager.GetCache<DateTime?>(GetType(), "startTimes");
             _taskQueue = new(500, null, logger, () => eventAggregator.PublishEvent(new DeezerArlRejectedEvent()));
 
@@ -66,6 +70,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer
 
             var downloadItem = await DownloadItem.From(remoteAlbum);
             await _taskQueue.QueueBackgroundWorkItemAsync(downloadItem);
+
+            if (downloadItem.MissingEdition != null)
+            {
+                _missingEditionTracker.Record(downloadItem.MissingEdition);
+                _eventAggregator.PublishEvent(new DeezerEditionMissingEvent());
+            }
+
             return downloadItem.ID;
         }
 

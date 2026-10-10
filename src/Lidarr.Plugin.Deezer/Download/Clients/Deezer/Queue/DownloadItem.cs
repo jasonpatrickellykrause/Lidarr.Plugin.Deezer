@@ -15,6 +15,7 @@ using NLog;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Plugin.Deezer;
+using NzbDrone.Plugin.Deezer.HealthChecks;
 
 namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 {
@@ -48,6 +49,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
                 item.SetMusicBrainzIds(remoteAlbum);
                 await item.SetDeezerData();
+                item.DetectMissingEdition(remoteAlbum);
             }
 
             return item;
@@ -70,6 +72,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         public string Message { get; set; }
 
         public bool ArlRejected { get; private set; }
+
+        // set when no MusicBrainz release of the album has as many tracks as Deezer's edition
+        public MissingEdition MissingEdition { get; private set; }
 
         public float Progress { get => DownloadedSize / (float)Math.Max(TotalSize, 1); }
         public long DownloadedSize { get; private set; }
@@ -368,6 +373,33 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             catch (Exception)
             {
                 // tagging is best-effort; never fail the grab over it
+            }
+        }
+
+        private void DetectMissingEdition(RemoteAlbum remoteAlbum)
+        {
+            try
+            {
+                var album = remoteAlbum?.Albums?.FirstOrDefault();
+                var releases = album?.AlbumReleases?.Value;
+                if (album == null || releases == null || releases.Count == 0)
+                    return;
+
+                // another release with Deezer's track count means the edition is in MusicBrainz and Lidarr can match it
+                if (releases.Any(r => r.TrackCount == _tracks.Length))
+                    return;
+
+                MissingEdition = new MissingEdition(
+                    album.Id,
+                    remoteAlbum.Artist?.Name ?? Artist,
+                    album.Title ?? Title,
+                    _deezerUrl.Id,
+                    _tracks.Length,
+                    releases.Select(r => r.TrackCount).ToArray());
+            }
+            catch (Exception)
+            {
+                // the warning is best-effort; never fail the grab over it
             }
         }
 
