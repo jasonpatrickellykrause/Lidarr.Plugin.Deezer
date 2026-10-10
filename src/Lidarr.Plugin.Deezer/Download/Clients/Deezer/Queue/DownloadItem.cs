@@ -315,11 +315,18 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
         private MusicBrainzIds GetMusicBrainzIdsForTrack(long trackId)
         {
-            // only trust a position match when Deezer and the Lidarr release have the same number of tracks;
-            // otherwise leave the recording ID out and let Lidarr match the track itself
+            // when the monitored release has a different track count, Deezer has a different edition of the album
+            if (_recordingIds != null && _recordingIds.Length != _tracks.Length)
+            {
+                // a release ID tag makes Lidarr's import consider only that release, which then fails with
+                // "Has missing tracks"; leaving out both IDs lets Lidarr pick the edition that matches the files
+                return MusicBrainzIds with { ReleaseId = null, ReleaseArtistId = null, RecordingId = null };
+            }
+
+            // the counts match, so tracks line up by position
             string recordingId = null;
             var index = Array.FindIndex(_tracks, t => t.id == trackId);
-            if (_recordingIds != null && _recordingIds.Length == _tracks.Length && index >= 0)
+            if (_recordingIds != null && index >= 0)
                 recordingId = _recordingIds[index];
 
             return MusicBrainzIds with { RecordingId = recordingId };
