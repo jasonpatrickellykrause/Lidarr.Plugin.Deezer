@@ -4,8 +4,10 @@ using NzbDrone.Common.Cache;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download.Clients.Deezer;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser;
 using NzbDrone.Plugin.Deezer;
+using NzbDrone.Plugin.Deezer.HealthChecks;
 
 namespace NzbDrone.Core.Indexers.Deezer
 {
@@ -20,8 +22,10 @@ namespace NzbDrone.Core.Indexers.Deezer
         public override TimeSpan RateLimit => TimeSpan.FromSeconds(1);
 
         private readonly IDeezerProxy _deezerProxy;
+        private readonly IEventAggregator _eventAggregator;
 
         public Deezer(IDeezerProxy deezerProxy,
+            IEventAggregator eventAggregator,
             IHttpClient httpClient,
             IIndexerStatusService indexerStatusService,
             IConfigService configService,
@@ -30,6 +34,7 @@ namespace NzbDrone.Core.Indexers.Deezer
             : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
             _deezerProxy = deezerProxy;
+            _eventAggregator = eventAggregator;
         }
 
         public override IIndexerRequestGenerator GetRequestGenerator()
@@ -47,7 +52,8 @@ namespace NzbDrone.Core.Indexers.Deezer
         {
             return new DeezerParser()
             {
-                Settings = Settings
+                Settings = Settings,
+                OnArlRejected = () => _eventAggregator.PublishEvent(new DeezerArlRejectedEvent())
             };
         }
     }
