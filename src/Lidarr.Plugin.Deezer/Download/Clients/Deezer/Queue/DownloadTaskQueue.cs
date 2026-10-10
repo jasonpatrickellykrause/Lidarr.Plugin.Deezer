@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
+using DeezNET.Exceptions;
 using NLog;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Parser.Model;
@@ -56,9 +57,18 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 }
                 catch (TaskCanceledException) { }
                 catch (OperationCanceledException) { }
+                catch (InvalidARLException ex)
+                {
+                    // a bad ARL isn't the release's fault, so keep it out of Lidarr's failed handling and blocklist
+                    item.Status = DownloadItemStatus.Warning;
+                    item.Message = "Deezer rejected the ARL before the download started. Replace the ARL in the Deezer download client, then remove this item and search again.";
+                    _logger.Error("Deezer rejected the ARL for album " + item.Title);
+                    _logger.Error(ex.ToString());
+                }
                 catch (Exception ex)
                 {
                     item.Status = DownloadItemStatus.Failed;
+                    item.Message = "Download failed: " + ex.Message;
                     _logger.Error("Error while downloading Deezer album " + item.Title);
                     _logger.Error(ex.ToString());
                 }
