@@ -8,25 +8,12 @@ using NzbDrone.Core.Download.Clients.Deezer;
 
 namespace NzbDrone.Core.Indexers.Deezer
 {
-    // Deezer's gw search doesn't honour the artist:"..." filter, so a search for one album returns up to a page of
-    // unrelated albums. Each result costs a paced album page lookup, so results whose credited artists don't include the
-    // searched artist are dropped before those lookups run.
+    // Deezer's gw search usually finds nothing for the artist:"..." query, and the plain fallback query returns up to a
+    // page of albums, many by other artists. Each result costs a paced album page lookup, so results whose credited
+    // artists don't include the searched artist are dropped before those lookups run.
     public static class DeezerArtistFilter
     {
-        private static readonly Regex ArtistFilterRegex = new("artist:\"(?<artist>[^\"]+)\"", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex NonAlphanumericRegex = new(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled);
-
-        // the artist named in a search query built by DeezerRequestGenerator, or null for the looser fallback query
-        public static string GetSearchedArtist(string query)
-        {
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                return null;
-            }
-
-            var match = ArtistFilterRegex.Match(query);
-            return match.Success ? match.Groups["artist"].Value : null;
-        }
 
         public static bool IsCreditedTo(DeezerGwAlbum album, string artist)
         {

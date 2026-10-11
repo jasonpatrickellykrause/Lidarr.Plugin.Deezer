@@ -61,28 +61,23 @@ namespace NzbDrone.Core.Indexers.Deezer
                 .ToArray();
         }
 
-        // Only the artist:"..." query names the artist. The looser fallback query and channel pages are left as they are,
-        // so a search whose results are all dropped here still falls through to the fallback tier.
+        // Deezer usually returns nothing for the artist:"..." query, so most searches are answered by the fallback query,
+        // which mixes in albums by other artists. Both tiers carry the searched artist on the request. Recent-release and
+        // channel requests don't, and are left as they are.
         private IList<DeezerGwAlbum> FilterBySearchedArtist(IndexerResponse response, IList<DeezerGwAlbum> results)
         {
-            var content = response.HttpRequest.ContentData;
-            if (content == null || content.Length == 0)
-                return results;
-
-            string artist;
-            try
-            {
-                artist = DeezerArtistFilter.GetSearchedArtist(JObject.Parse(Encoding.UTF8.GetString(content))["query"]?.Value<string>());
-            }
-            catch (JsonException)
-            {
-                return results;
-            }
-
-            if (artist == null)
+            if (response.Request is not DeezerSearchRequest { SearchedArtist: { } artist } request || results.Count == 0)
                 return results;
 
             var matching = results.Where(r => DeezerArtistFilter.IsCreditedTo(r, artist)).ToList();
+
+            // nothing credited to the artist in the last tier: keep everything rather than return no results, in case
+            // Deezer spells the artist differently
+            if (matching.Count == 0 && request.IsFallback)
+            {
+                Logger?.Debug("No Deezer results credited to '{0}'; keeping all {1}", artist, results.Count);
+                return results;
+            }
 
             if (matching.Count < results.Count)
                 Logger?.Debug("Skipping {0} of {1} Deezer results not credited to '{2}'", results.Count - matching.Count, results.Count, artist);
