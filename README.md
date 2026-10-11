@@ -10,16 +10,17 @@ The main differences from upstream:
 - **ARL protection:** Lidarr masks the ARL in its interface and API, and a Saved ARL field shows only its last four characters.
 - **Gentler on your account:** the plugin paces track downloads and search lookups, stops an album as soon as Deezer rejects the ARL, and no longer retries a dead session without limit.
 - **Fewer failed grabs:** search results only offer FLAC or MP3 320 when every track on the album is available at that quality.
+- **Problems you can see:** failed downloads appear in Activity so Lidarr can search again, and **System** > **Status** reports a dead ARL or a Deezer edition missing from MusicBrainz.
 - **MusicBrainz tagging:** downloaded files carry the release, artist, and recording IDs Lidarr matched, which helps imports.
 - **Maintained dependencies:** the plugin builds [a maintained fork of DeezNET](https://github.com/jasonpatrickellykrause/DeezNET) from source, and Dependabot, CodeQL, and signed build provenance cover both projects.
 
 You can't install this fork alongside TrevTV's plugin. See [Switching from another Deezer plugin](#switching-from-another-deezer-plugin).
 
 ## Installation
-This requires your Lidarr setup to be using the `plugins` branch. My docker-compose is setup like the following.
+This requires Lidarr 3.1.2.4938 or later on the `develop` or `nightly` branch. The `master` branch doesn't support plugins yet. My docker-compose is setup like the following.
 ```yml
   lidarr:
-    image: ghcr.io/hotio/lidarr:pr-plugins
+    image: ghcr.io/hotio/lidarr:testing
     container_name: lidarr
     environment:
       - PUID:100
@@ -60,6 +61,35 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
+
+### 10.2.0.42
+- Lidarr may not match a Deezer album on import when no MusicBrainz release of the album has the same number of tracks. When Lidarr grabs such an album, a warning on **System** > **Status** lists it with a [Harmony](https://harmony.pulsewidth.org.uk/) link for adding Deezer's edition to MusicBrainz. The warning clears once a release with the same track count appears after an artist refresh, or after 30 days. The plugin keeps the list in memory, so it starts empty after a restart.
+
+### 10.2.0.41
+- A health check on **System** > **Status** reports an error when Deezer no longer accepts the indexer's ARL or the account has no streaming subscription. It reports a warning when it can't reach Deezer. The check runs at startup, every 6 hours, after you save a Deezer indexer, and right after Deezer rejects the ARL during a search or download. Lidarr sends health check issues to any notification set up for them.
+- Messages that said to replace the ARL in the download client now point to the indexer. Only the indexer has an ARL setting.
+
+### 10.2.0.38
+- Builds no longer show hundreds of DeezNET documentation warnings or repeat Lidarr's package advisories. No change to the plugin itself.
+
+### 10.2.0.35
+- When Deezer's edition of an album has a different track count from the monitored MusicBrainz release, downloaded files no longer carry that release's ID. Before, the ID made Lidarr compare the files with that release only, and the import failed with `Has missing tracks`.
+
+### 10.2.0.34
+- Failed downloads now appear in **Activity** with the number of tracks that failed. Lidarr blocklists the release, searches again if that's turned on, and deletes the download folder when the download client's **Remove Failed** setting is on. Before, failed albums disappeared from the queue and left their files behind.
+- When Deezer rejects the ARL during a download, the item shows a warning instead of failing, so Lidarr doesn't blocklist a release that isn't at fault.
+- Each quality downloads into its own folder, such as `Album [FLAC]`, so a failed attempt no longer shares a folder with a later grab of the same album.
+- When a track fails after the plugin starts writing its file, the plugin deletes that file, so imports no longer pick up empty or partial files.
+- If an album has one unavailable track, Lidarr now deletes the whole album's folder when **Remove Failed** is on. Turn it off to keep the files for a manual import.
+
+### 10.2.0.31
+- Searches recover when Deezer rejects the session token, which can happen well before the plugin's daily token refresh. Before, every search failed with `ArgumentNullException` and Lidarr paused the indexer for up to an hour. If Deezer still rejects the session after a refresh, the indexer reports that the ARL has probably expired.
+
+### 10.2.0.30
+- Builds pass again after new advisories for `SixLabors.ImageSharp` 3.1.12, which comes from Lidarr and doesn't ship with the plugin. The fixed versions need a paid license key to build, so the plugin suppresses these advisories until Lidarr updates. No change to the plugin itself.
+
+### 10.2.0.27
+- Builds against Lidarr 3.1.6.5078.
 
 ### 10.2.0.24
 - Fixed a `MissingMethodException` in the duplicate install health check on Lidarr 3.1.5 and later. The check failed every time Lidarr ran its health checks.
