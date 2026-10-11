@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using DeezNET.Exceptions;
+using NLog;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
@@ -20,6 +21,8 @@ namespace NzbDrone.Core.Indexers.Deezer
     public class DeezerParser : IParseIndexerResponse
     {
         public DeezerIndexerSettings Settings { get; set; }
+
+        public Logger Logger { get; set; }
 
         // lets the ARL health check run as soon as a search finds the ARL dead
         public Action OnArlRejected { get; set; }
@@ -41,7 +44,9 @@ namespace NzbDrone.Core.Indexers.Deezer
             if (jsonResponse?.Data == null)
                 return torrentInfos;
 
-            var tasks = jsonResponse.Data.Select(result => ProcessResultAsync(result)).ToArray();
+            var results = FilterBySearchedArtist(response, jsonResponse.Data);
+
+            var tasks = results.Select(result => ProcessResultAsync(result)).ToArray();
 
             Task.WaitAll(tasks);
 
@@ -54,6 +59,35 @@ namespace NzbDrone.Core.Indexers.Deezer
             return torrentInfos
                 .OrderByDescending(o => o.Size)
                 .ToArray();
+        }
+
+        // Only the artist:"..." query names the artist. The looser fallback query and channel pages are left as they are,
+        // so a search whose results are all dropped here still falls through to the fallback tier.
+        private IList<DeezerGwAlbum> FilterBySearchedArtist(IndexerResponse response, IList<DeezerGwAlbum> results)
+        {
+            var content = response.HttpRequest.ContentData;
+            if (content == null || content.Length == 0)
+                return results;
+
+            string artist;
+            try
+            {
+                artist = DeezerArtistFilter.GetSearchedArtist(JObject.Parse(Encoding.UTF8.GetString(content))["query"]?.Value<string>());
+            }
+            catch (JsonException)
+            {
+                return results;
+            }
+
+            if (artist == null)
+                return results;
+
+            var matching = results.Where(r => DeezerArtistFilter.IsCreditedTo(r, artist)).ToList();
+
+            if (matching.Count < results.Count)
+                Logger?.Debug("Skipping {0} of {1} Deezer results not credited to '{2}'", results.Count - matching.Count, results.Count, artist);
+
+            return matching;
         }
 
         // A gw api error comes back as HTTP 200 with empty results, so it has to be checked here or it surfaces as a
