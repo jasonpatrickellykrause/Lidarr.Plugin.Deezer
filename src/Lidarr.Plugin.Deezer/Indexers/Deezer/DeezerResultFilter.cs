@@ -9,11 +9,39 @@ using NzbDrone.Core.Download.Clients.Deezer;
 namespace NzbDrone.Core.Indexers.Deezer
 {
     // Deezer's gw search usually finds nothing for the artist:"..." query, and the plain fallback query returns up to a
-    // page of albums, many by other artists. Each result costs a paced album page lookup, so results whose credited
-    // artists don't include the searched artist are dropped before those lookups run.
-    public static class DeezerArtistFilter
+    // page of albums: the searched album, the artist's other releases, and albums by other artists. Each result costs a
+    // paced album page lookup, and Lidarr rejects every result that isn't the searched album, so results by other
+    // artists or with other titles are dropped before those lookups run.
+    public static class DeezerResultFilter
     {
         private static readonly Regex NonAlphanumericRegex = new(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled);
+
+        // edition and format notes Deezer adds to titles: "(Deluxe Edition)", "[Remastered]", " - EP", " - Single"
+        private static readonly Regex TitleExtrasRegex = new(@"\([^)]*\)|\[[^\]]*\]|\s+-\s+(EP|Single)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        public static bool IsTitled(DeezerGwAlbum album, string title)
+        {
+            var searched = Normalize(StripTitleExtras(title));
+            if (searched.Length == 0)
+            {
+                return true;
+            }
+
+            return NamesMatch(Normalize(StripTitleExtras(album.AlbumTitle)), searched);
+        }
+
+        private static string StripTitleExtras(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return string.Empty;
+            }
+
+            var stripped = TitleExtrasRegex.Replace(title, " ");
+
+            // a title that is nothing but a parenthetical keeps it
+            return string.IsNullOrWhiteSpace(stripped) ? title : stripped;
+        }
 
         public static bool IsCreditedTo(DeezerGwAlbum album, string artist)
         {
@@ -39,7 +67,8 @@ namespace NzbDrone.Core.Indexers.Deezer
                 return false;
             }
 
-            // whole-word containment either way, so "Becky Hill" matches "Becky Hill & MK" and "MK & Becky Hill"
+            // whole-word containment either way, so "Becky Hill" matches "Becky Hill & MK" and "MK & Becky Hill", and
+            // "Rebecca" matches "Rebecca Remixed"
             return $" {candidate} ".Contains($" {searched} ", StringComparison.Ordinal) ||
                    $" {searched} ".Contains($" {candidate} ", StringComparison.Ordinal);
         }

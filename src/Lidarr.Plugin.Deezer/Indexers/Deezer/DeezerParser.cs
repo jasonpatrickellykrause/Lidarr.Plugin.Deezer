@@ -44,7 +44,7 @@ namespace NzbDrone.Core.Indexers.Deezer
             if (jsonResponse?.Data == null)
                 return torrentInfos;
 
-            var results = FilterBySearchedArtist(response, jsonResponse.Data);
+            var results = FilterSearchResults(response, jsonResponse.Data);
 
             var tasks = results.Select(result => ProcessResultAsync(result)).ToArray();
 
@@ -62,27 +62,41 @@ namespace NzbDrone.Core.Indexers.Deezer
         }
 
         // Deezer usually returns nothing for the artist:"..." query, so most searches are answered by the fallback query,
-        // which mixes in albums by other artists. Both tiers carry the searched artist on the request. Recent-release and
-        // channel requests don't, and are left as they are.
-        private IList<DeezerGwAlbum> FilterBySearchedArtist(IndexerResponse response, IList<DeezerGwAlbum> results)
+        // which returns the artist's whole catalogue plus albums by other artists. Both tiers carry the searched artist,
+        // and album searches the album title, on the request. Recent-release and channel requests carry neither and are
+        // left as they are.
+        private IList<DeezerGwAlbum> FilterSearchResults(IndexerResponse response, IList<DeezerGwAlbum> results)
         {
-            if (response.Request is not DeezerSearchRequest { SearchedArtist: { } artist } request || results.Count == 0)
+            if (response.Request is not DeezerSearchRequest request || results.Count == 0 ||
+                (request.SearchedArtist == null && request.SearchedAlbum == null))
                 return results;
 
-            var matching = results.Where(r => DeezerArtistFilter.IsCreditedTo(r, artist)).ToList();
+            var byArtist = request.SearchedArtist == null
+                ? results.ToList()
+                : results.Where(r => DeezerResultFilter.IsCreditedTo(r, request.SearchedArtist)).ToList();
 
-            // nothing credited to the artist in the last tier: keep everything rather than return no results, in case
-            // Deezer spells the artist differently
-            if (matching.Count == 0 && request.IsFallback)
+            var matching = request.SearchedAlbum == null
+                ? byArtist
+                : byArtist.Where(r => DeezerResultFilter.IsTitled(r, request.SearchedAlbum)).ToList();
+
+            if (matching.Count > 0 || !request.IsFallback)
             {
-                Logger?.Debug("No Deezer results credited to '{0}'; keeping all {1}", artist, results.Count);
-                return results;
+                if (matching.Count < results.Count)
+                    Logger?.Debug("Skipping {0} of {1} Deezer results that aren't '{2}' by '{3}'", results.Count - matching.Count, results.Count, request.SearchedAlbum ?? "any album", request.SearchedArtist ?? "any artist");
+
+                return matching;
             }
 
-            if (matching.Count < results.Count)
-                Logger?.Debug("Skipping {0} of {1} Deezer results not credited to '{2}'", results.Count - matching.Count, results.Count, artist);
+            // The last tier never comes back empty just because of these filters, in case Deezer names the album or the
+            // artist differently: fall back to the artist's releases, then to everything.
+            if (byArtist.Count > 0)
+            {
+                Logger?.Debug("No Deezer results titled '{0}'; keeping the {1} of {2} credited to '{3}'", request.SearchedAlbum, byArtist.Count, results.Count, request.SearchedArtist);
+                return byArtist;
+            }
 
-            return matching;
+            Logger?.Debug("No Deezer results matched '{0}' by '{1}'; keeping all {2}", request.SearchedAlbum ?? "any album", request.SearchedArtist ?? "any artist", results.Count);
+            return results;
         }
 
         // A gw api error comes back as HTTP 200 with empty results, so it has to be checked here or it surfaces as a
