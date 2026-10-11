@@ -53,6 +53,7 @@ namespace NzbDrone.Core.Indexers.Deezer
             return new DeezerParser()
             {
                 Settings = Settings,
+                Logger = _logger,
                 OnArlRejected = () => _eventAggregator.PublishEvent(new DeezerArlRejectedEvent())
             };
         }

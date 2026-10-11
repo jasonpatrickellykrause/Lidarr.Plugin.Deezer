@@ -14,6 +14,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer
         public int Total { get; set; }
     }
 
+    public class DeezerGwArtist
+    {
+        [JsonProperty("ART_NAME")]
+        public string ArtistName { get; set; }
+    }
+
     public class ExplicitAlbumContent
     {
         [JsonProperty("EXPLICIT_LYRICS_STATUS")]
@@ -36,6 +42,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer
         public string ArtistId { get; set; }
         [JsonProperty("ART_NAME")]
         public string ArtistName { get; set; }
+        // every credited artist; ART_NAME is only the main one
+        [JsonProperty("ARTISTS")]
+        public IList<DeezerGwArtist> Artists { get; set; }
         [JsonProperty("EXPLICIT_ALBUM_CONTENT")]
         public ExplicitAlbumContent ExplicitAlbumContent { get; set; }
 
