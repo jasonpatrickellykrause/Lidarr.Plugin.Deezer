@@ -87,15 +87,16 @@ namespace NzbDrone.Core.Indexers.Deezer
                 return matching;
             }
 
-            // The last tier never comes back empty just because of these filters, in case Deezer names the album or the
-            // artist differently: fall back to the artist's releases, then to everything.
+            // Deezer found the artist but nothing titled like the album, which usually means Deezer doesn't have it yet.
+            // Lidarr would reject every one of the artist's other releases, so don't look them up.
             if (byArtist.Count > 0)
             {
-                Logger?.Debug("No Deezer results titled '{0}'; keeping the {1} of {2} credited to '{3}'", request.SearchedAlbum, byArtist.Count, results.Count, request.SearchedArtist);
-                return byArtist;
+                Logger?.Debug("None of the {0} Deezer results credited to '{1}' are titled '{2}'; Deezer probably doesn't have it", byArtist.Count, request.SearchedArtist, request.SearchedAlbum);
+                return new List<DeezerGwAlbum>();
             }
 
-            Logger?.Debug("No Deezer results matched '{0}' by '{1}'; keeping all {2}", request.SearchedAlbum ?? "any album", request.SearchedArtist ?? "any artist", results.Count);
+            // Nothing credited to the artist at all: Deezer may name the artist differently, so keep everything.
+            Logger?.Debug("No Deezer results credited to '{0}'; keeping all {1}", request.SearchedArtist ?? "any artist", results.Count);
             return results;
         }
 

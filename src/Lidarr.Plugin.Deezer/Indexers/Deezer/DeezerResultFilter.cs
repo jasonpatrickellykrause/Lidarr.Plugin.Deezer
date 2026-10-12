@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Download.Clients.Deezer;
 
 namespace NzbDrone.Core.Indexers.Deezer
@@ -16,6 +17,9 @@ namespace NzbDrone.Core.Indexers.Deezer
     {
         private static readonly Regex NonAlphanumericRegex = new(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled);
 
+        // the same threshold Lidarr uses for inexact album title matches (AlbumYearMatchingOptions.TitleFuzzThreshold)
+        private const double TitleFuzzThreshold = 0.70;
+
         // edition and format notes Deezer adds to titles: "(Deluxe Edition)", "[Remastered]", " - EP", " - Single"
         private static readonly Regex TitleExtrasRegex = new(@"\([^)]*\)|\[[^\]]*\]|\s+-\s+(EP|Single)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -27,7 +31,12 @@ namespace NzbDrone.Core.Indexers.Deezer
                 return true;
             }
 
-            return NamesMatch(Normalize(StripTitleExtras(album.AlbumTitle)), searched);
+            var candidate = Normalize(StripTitleExtras(album.AlbumTitle));
+
+            // Lidarr falls back to a fuzzy title match when it maps a release to the searched album, so anything it
+            // could accept that way is kept: small spelling differences, "vol" for "volume", a missing word
+            return NamesMatch(candidate, searched) ||
+                   (candidate.Length > 0 && candidate.FuzzyMatch(searched) >= TitleFuzzThreshold);
         }
 
         private static string StripTitleExtras(string title)
