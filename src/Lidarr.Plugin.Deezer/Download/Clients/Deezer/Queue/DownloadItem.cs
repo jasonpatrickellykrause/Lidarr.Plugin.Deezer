@@ -418,6 +418,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 if (releases.Any(r => r.TrackCount == _tracks.Length))
                     return;
 
+                // under half the tracks of the shortest release isn't another edition, it's a different release grabbed
+                // under the album's name, usually the title-track single. Adding it to MusicBrainz as an edition would
+                // be wrong, so don't suggest it. Same rule as DeezerResultFilter.HasEnoughTracks.
+                var shortestRelease = releases.Where(r => r.TrackCount > 0).Select(r => r.TrackCount).DefaultIfEmpty(0).Min();
+                if (_tracks.Length * 2 < shortestRelease)
+                    return;
+
                 MissingEdition = new MissingEdition(
                     album.Id,
                     remoteAlbum.Artist?.Name ?? Artist,

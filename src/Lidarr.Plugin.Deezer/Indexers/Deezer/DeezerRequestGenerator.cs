@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using NLog;
 using NzbDrone.Common.Http;
@@ -61,10 +63,35 @@ namespace NzbDrone.Core.Indexers.Deezer
         {
             var chain = new IndexerPageableRequestChain();
 
-            chain.AddTier(GetRequests($"artist:\"{searchCriteria.ArtistQuery}\" album:\"{searchCriteria.AlbumQuery}\"", searchCriteria.ArtistQuery, searchCriteria.AlbumTitle));
-            chain.AddTier(GetRequests($"{searchCriteria.ArtistQuery} {searchCriteria.AlbumQuery}", searchCriteria.ArtistQuery, searchCriteria.AlbumTitle, isFallback: true));
+            var minTrackCount = GetMinTrackCount(searchCriteria);
+
+            chain.AddTier(GetRequests($"artist:\"{searchCriteria.ArtistQuery}\" album:\"{searchCriteria.AlbumQuery}\"", searchCriteria.ArtistQuery, searchCriteria.AlbumTitle, minTrackCount));
+            chain.AddTier(GetRequests($"{searchCriteria.ArtistQuery} {searchCriteria.AlbumQuery}", searchCriteria.ArtistQuery, searchCriteria.AlbumTitle, minTrackCount, isFallback: true));
 
             return chain;
+        }
+
+        // the shortest MusicBrainz release of the searched album, so the parser can skip the title-track single Deezer
+        // lists under the same name; null when Lidarr is searching several albums or has no release data
+        private int? GetMinTrackCount(AlbumSearchCriteria searchCriteria)
+        {
+            try
+            {
+                if (searchCriteria.Albums is not { Count: 1 })
+                    return null;
+
+                var counts = searchCriteria.Albums[0].AlbumReleases?.Value?
+                    .Select(r => r.TrackCount)
+                    .Where(c => c > 0)
+                    .ToList();
+
+                return counts is { Count: > 0 } ? counts.Min() : null;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug(ex, "Couldn't read the release track counts for {0}", searchCriteria);
+                return null;
+            }
         }
 
         public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria)
@@ -77,8 +104,9 @@ namespace NzbDrone.Core.Indexers.Deezer
             return chain;
         }
 
-        // searchedArtist and searchedAlbum let the parser drop unrelated results before it looks up their album pages
-        private IEnumerable<IndexerRequest> GetRequests(string searchParameters, string searchedArtist = null, string searchedAlbum = null, bool isFallback = false)
+        // searchedArtist, searchedAlbum and minTrackCount let the parser drop unrelated results before it looks up their
+        // album pages
+        private IEnumerable<IndexerRequest> GetRequests(string searchParameters, string searchedArtist = null, string searchedAlbum = null, int? minTrackCount = null, bool isFallback = false)
         {
             DeezerAPI.Instance?.TryUpdateToken();
 
@@ -94,7 +122,7 @@ namespace NzbDrone.Core.Indexers.Deezer
                 };
 
                 var url = DeezerAPI.Instance!.GetGWUrl("search.music");
-                var req = new DeezerSearchRequest(url, HttpAccept.Json, searchedArtist, searchedAlbum, isFallback);
+                var req = new DeezerSearchRequest(url, HttpAccept.Json, searchedArtist, searchedAlbum, minTrackCount, isFallback);
                 req.HttpRequest.SetContent(data.ToString(Newtonsoft.Json.Formatting.None));
                 req.HttpRequest.Method = System.Net.Http.HttpMethod.Post;
                 req.HttpRequest.Cookies.Add("sid", DeezerAPI.Instance.Client.SID);
