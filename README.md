@@ -62,6 +62,13 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.57
+- Album searches skip a Deezer release with fewer than half the tracks of the album's shortest MusicBrainz release. Deezer often lists the title-track single under the album's name, and Lidarr would grab it and then fail the import with `Has missing tracks`. Editions a few tracks longer or shorter are still offered.
+- The missing-edition warning on **System** > **Status** no longer lists a single grabbed under an album's name. It only covers releases with at least half the tracks of the album's shortest MusicBrainz release.
+
+### 10.2.0.56
+- A track no longer fails when the plugin can't fetch its lyrics from Deezer or LRCLIB. The plugin tags and saves the track without lyrics and writes a warning to the Lidarr log. Before, one dropped connection to LRCLIB marked a fully downloaded album as failed, Lidarr blocklisted it, and the affected track had no tags.
+
 ### 10.2.0.51
 - Searching for an album Deezer doesn't have now finishes in a second or two. When Deezer returns the artist's releases but none with the album's title, the indexer returns no Deezer results instead of looking up each release. A title still counts as the album if Lidarr would match it inexactly, for example with a small spelling difference or `Vol` for `Volume`.
 
