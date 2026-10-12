@@ -120,7 +120,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                         }
                         isFirstTrack = false;
 
-                        await DoTrackDownload(trackId, settings, cancellation);
+                        await DoTrackDownload(trackId, settings, logger, cancellation);
                         DownloadedSize += trackSize;
                     }
                     catch (TaskCanceledException) { }
@@ -164,7 +164,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
         }
 
-        private async Task DoTrackDownload(long track, DeezerSettings settings, CancellationToken cancellation = default)
+        private async Task DoTrackDownload(long track, DeezerSettings settings, Logger logger, CancellationToken cancellation = default)
         {
             var page = await DeezerAPI.Instance.Client.GWApi.GetTrackPage(track, cancellation);
 
@@ -205,7 +205,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             var plainLyrics = string.Empty;
             List<SyncLyrics> syncLyrics = null;
 
-            var lyrics = await DeezerAPI.Instance.Client.Downloader.FetchLyricsFromDeezer(track, cancellation);
+            var lyrics = await TryFetchLyrics(() => DeezerAPI.Instance.Client.Downloader.FetchLyricsFromDeezer(track, cancellation), "Deezer", track, logger, cancellation);
             if (lyrics.HasValue)
             {
                 plainLyrics = lyrics.Value.plainLyrics;
@@ -216,7 +216,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
             if (settings.UseLRCLIB && (string.IsNullOrWhiteSpace(plainLyrics) || (settings.SaveSyncedLyrics && !(syncLyrics?.Any() ?? false))))
             {
-                lyrics = await DeezerAPI.Instance.Client.Downloader.FetchLyricsFromLRCLIB("lrclib.net", songTitle, artistName, albumTitle, duration, cancellation);
+                lyrics = await TryFetchLyrics(() => DeezerAPI.Instance.Client.Downloader.FetchLyricsFromLRCLIB("lrclib.net", songTitle, artistName, albumTitle, duration, cancellation), "LRCLIB", track, logger, cancellation);
                 if (lyrics.HasValue)
                 {
                     if (string.IsNullOrWhiteSpace(plainLyrics))
@@ -329,6 +329,35 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             var correctedPath = Path.ChangeExtension(path, ext);
             File.Move(path, correctedPath, true);
             return correctedPath;
+        }
+
+        // Lyrics are optional extras fetched after the audio is written. An error from Deezer's lyrics endpoint or from
+        // LRCLIB (a third-party service) used to fail the track, so one dropped connection got a complete album marked
+        // failed and blocklisted. A rejected ARL and cancellation still propagate.
+        private static async Task<(string plainLyrics, List<SyncLyrics> syncLyrics)?> TryFetchLyrics(
+            Func<Task<(string plainLyrics, List<SyncLyrics> syncLyrics)?>> fetch,
+            string source,
+            long track,
+            Logger logger,
+            CancellationToken cancellation)
+        {
+            try
+            {
+                return await fetch();
+            }
+            catch (InvalidARLException)
+            {
+                throw;
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger?.Warn("Couldn't fetch lyrics for Deezer track {0} from {1}, saving it without them: {2}", track, source, ex.Message);
+                return null;
+            }
         }
 
         private static async Task CreateLrcFile(string lrcFilePath, List<SyncLyrics> syncLyrics)
