@@ -62,6 +62,18 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.51
+- Searching for an album Deezer doesn't have now finishes in a second or two. When Deezer returns the artist's releases but none with the album's title, the indexer returns no Deezer results instead of looking up each release. A title still counts as the album if Lidarr would match it inexactly, for example with a small spelling difference or `Vol` for `Volume`.
+
+### 10.2.0.49
+- Album searches only look up Deezer results whose title matches the album. Deezer's search returns most of the artist's catalogue, and each result cost a paced album lookup that Lidarr then rejected. Title matching ignores case, accents, punctuation, and notes such as `(Deluxe Edition)`, `[Explicit]`, ` - EP` and ` - Single`.
+
+### 10.2.0.47
+- Searches skip Deezer results by other artists before looking them up. This now covers the plain artist-and-album search that answers most searches. A result counts when the searched artist is its main artist or one of its credited artists.
+
+### 10.2.0.45
+- First version of the artist filter for search results. It only applied to Deezer's `artist:` search, which returns nothing for most searches, so searches weren't noticeably faster until 10.2.0.47.
+
 ### 10.2.0.42
 - Lidarr may not match a Deezer album on import when no MusicBrainz release of the album has the same number of tracks. When Lidarr grabs such an album, a warning on **System** > **Status** lists it with a [Harmony](https://harmony.pulsewidth.org.uk/) link for adding Deezer's edition to MusicBrainz. The warning clears once a release with the same track count appears after an artist refresh, or after 30 days. The plugin keeps the list in memory, so it starts empty after a restart.
 
