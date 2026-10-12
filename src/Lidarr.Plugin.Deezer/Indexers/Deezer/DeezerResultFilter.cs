@@ -39,6 +39,22 @@ namespace NzbDrone.Core.Indexers.Deezer
                    (candidate.Length > 0 && candidate.FuzzyMatch(searched) >= TitleFuzzThreshold);
         }
 
+        // Deezer often lists the title-track single under the album's name ("Exit Life", 1 track, beside "EXIT LIFE", 15
+        // tracks). A result with fewer than half the tracks of the album's shortest MusicBrainz release can't be that
+        // album; Lidarr would grab it and then reject the import with "Has missing tracks". Alternate editions with a few
+        // tracks more or fewer still pass.
+        public static bool HasEnoughTracks(DeezerGwAlbum album, int? minTrackCount)
+        {
+            if (minTrackCount is not > 0 ||
+                !int.TryParse(album.TrackCount, NumberStyles.Integer, CultureInfo.InvariantCulture, out var tracks) ||
+                tracks <= 0)
+            {
+                return true;
+            }
+
+            return tracks * 2 >= minTrackCount.Value;
+        }
+
         private static string StripTitleExtras(string title)
         {
             if (string.IsNullOrWhiteSpace(title))

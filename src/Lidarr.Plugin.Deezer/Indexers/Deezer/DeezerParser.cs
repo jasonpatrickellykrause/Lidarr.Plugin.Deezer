@@ -75,9 +75,14 @@ namespace NzbDrone.Core.Indexers.Deezer
                 ? results.ToList()
                 : results.Where(r => DeezerResultFilter.IsCreditedTo(r, request.SearchedArtist)).ToList();
 
-            var matching = request.SearchedAlbum == null
+            var titled = request.SearchedAlbum == null
                 ? byArtist
                 : byArtist.Where(r => DeezerResultFilter.IsTitled(r, request.SearchedAlbum)).ToList();
+
+            var matching = titled.Where(r => DeezerResultFilter.HasEnoughTracks(r, request.MinTrackCount)).ToList();
+
+            if (matching.Count < titled.Count)
+                Logger?.Debug("Skipping {0} Deezer results titled '{1}' with fewer than half of the {2} tracks of its shortest MusicBrainz release: {3}", titled.Count - matching.Count, request.SearchedAlbum, request.MinTrackCount, string.Join(", ", titled.Except(matching).Select(r => $"'{r.AlbumTitle}' ({r.TrackCount} tracks)")));
 
             if (matching.Count > 0 || !request.IsFallback)
             {
@@ -87,8 +92,9 @@ namespace NzbDrone.Core.Indexers.Deezer
                 return matching;
             }
 
-            // Deezer found the artist but nothing titled like the album, which usually means Deezer doesn't have it yet.
-            // Lidarr would reject every one of the artist's other releases, so don't look them up.
+            // Deezer found the artist but nothing titled like the album with enough tracks, which usually means Deezer
+            // doesn't have it yet, or only has the title-track single. Lidarr would reject every one of these, so don't
+            // look them up.
             if (byArtist.Count > 0)
             {
                 Logger?.Debug("None of the {0} Deezer results credited to '{1}' are titled '{2}'; Deezer probably doesn't have it", byArtist.Count, request.SearchedArtist, request.SearchedAlbum);
