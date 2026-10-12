@@ -61,8 +61,8 @@ namespace NzbDrone.Core.Indexers.Deezer
         {
             var chain = new IndexerPageableRequestChain();
 
-            chain.AddTier(GetRequests($"artist:\"{searchCriteria.ArtistQuery}\" album:\"{searchCriteria.AlbumQuery}\"", searchCriteria.ArtistQuery));
-            chain.AddTier(GetRequests($"{searchCriteria.ArtistQuery} {searchCriteria.AlbumQuery}", searchCriteria.ArtistQuery, isFallback: true));
+            chain.AddTier(GetRequests($"artist:\"{searchCriteria.ArtistQuery}\" album:\"{searchCriteria.AlbumQuery}\"", searchCriteria.ArtistQuery, searchCriteria.AlbumTitle));
+            chain.AddTier(GetRequests($"{searchCriteria.ArtistQuery} {searchCriteria.AlbumQuery}", searchCriteria.ArtistQuery, searchCriteria.AlbumTitle, isFallback: true));
 
             return chain;
         }
@@ -77,8 +77,8 @@ namespace NzbDrone.Core.Indexers.Deezer
             return chain;
         }
 
-        // searchedArtist lets the parser drop results by other artists before it looks up their album pages
-        private IEnumerable<IndexerRequest> GetRequests(string searchParameters, string searchedArtist = null, bool isFallback = false)
+        // searchedArtist and searchedAlbum let the parser drop unrelated results before it looks up their album pages
+        private IEnumerable<IndexerRequest> GetRequests(string searchParameters, string searchedArtist = null, string searchedAlbum = null, bool isFallback = false)
         {
             DeezerAPI.Instance?.TryUpdateToken();
 
@@ -94,7 +94,7 @@ namespace NzbDrone.Core.Indexers.Deezer
                 };
 
                 var url = DeezerAPI.Instance!.GetGWUrl("search.music");
-                var req = new DeezerSearchRequest(url, HttpAccept.Json, searchedArtist, isFallback);
+                var req = new DeezerSearchRequest(url, HttpAccept.Json, searchedArtist, searchedAlbum, isFallback);
                 req.HttpRequest.SetContent(data.ToString(Newtonsoft.Json.Formatting.None));
                 req.HttpRequest.Method = System.Net.Http.HttpMethod.Post;
                 req.HttpRequest.Cookies.Add("sid", DeezerAPI.Instance.Client.SID);
