@@ -216,21 +216,22 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     syncLyrics = lyrics.Value.syncLyrics;
             }
 
-            if (settings.UseLRCLIB && (string.IsNullOrWhiteSpace(plainLyrics) || (settings.SaveSyncedLyrics && !(syncLyrics?.Any() ?? false))))
+            if (settings.UseLRCLIB && (string.IsNullOrWhiteSpace(plainLyrics) || (settings.SaveSyncedLyrics && !HasSyncedLines(syncLyrics))))
             {
                 lyrics = await TryFetchLyrics(() => DeezerAPI.Instance.Client.Downloader.FetchLyricsFromLRCLIB("lrclib.net", songTitle, artistName, albumTitle, duration, cancellation), "LRCLIB", track, logger, cancellation);
                 if (lyrics.HasValue)
                 {
                     if (string.IsNullOrWhiteSpace(plainLyrics))
                         plainLyrics = lyrics.Value.plainLyrics;
-                    if (settings.SaveSyncedLyrics && !(syncLyrics?.Any() ?? false))
+                    if (settings.SaveSyncedLyrics && !HasSyncedLines(syncLyrics))
                         syncLyrics = lyrics.Value.syncLyrics;
                 }
             }
 
             await DeezerAPI.Instance.Client.Downloader.ApplyMetadataToFile(track, outPath, 512, plainLyrics, GetMusicBrainzIdsForTrack(track), cancellation);
 
-            if (syncLyrics != null)
+            // an empty list, or one with only blank lines, would write an empty .lrc that Lidarr imports next to the track
+            if (HasSyncedLines(syncLyrics))
                 await CreateLrcFile(Path.Combine(outDir, MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", "lrc", page, _deezerAlbum)), syncLyrics);
 
             // TODO: this is currently a waste of resources, if this pr ever gets merged, it can be reenabled
@@ -362,14 +363,17 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
         }
 
+        // the lines CreateLrcFile writes; Deezer's synced lyrics include entries with no text for instrumental breaks
+        private static bool IsWritableLine(SyncLyrics lyric) => !string.IsNullOrEmpty(lyric.LrcTimestamp) && !string.IsNullOrEmpty(lyric.Line);
+
+        internal static bool HasSyncedLines(List<SyncLyrics> syncLyrics) => syncLyrics?.Any(IsWritableLine) ?? false;
+
         private static async Task CreateLrcFile(string lrcFilePath, List<SyncLyrics> syncLyrics)
         {
             StringBuilder lrcContent = new();
-            foreach (var lyric in syncLyrics)
-            {
-                if (!string.IsNullOrEmpty(lyric.LrcTimestamp) && !string.IsNullOrEmpty(lyric.Line))
-                    lrcContent.AppendLine(CultureInfo.InvariantCulture, $"{lyric.LrcTimestamp} {lyric.Line}");
-            }
+            foreach (var lyric in syncLyrics.Where(IsWritableLine))
+                lrcContent.AppendLine(CultureInfo.InvariantCulture, $"{lyric.LrcTimestamp} {lyric.Line}");
+
             await File.WriteAllTextAsync(lrcFilePath, lrcContent.ToString());
         }
 
