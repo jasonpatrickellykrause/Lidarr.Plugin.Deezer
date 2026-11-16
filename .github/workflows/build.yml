@@ -62,8 +62,8 @@ jobs:
           dotnet restore src/*.sln -p:TreatWarningsAsErrors=false -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props
           dotnet build src/*.sln -c Release -f ${{ matrix.framework }} -p:TreatWarningsAsErrors=false -p:PluginRepository=${{ github.repository }} -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props
       - name: Test DeezNET
-        # offline decryption tests only; the others call Deezer and compare against live data
-        run: dotnet test ext/DeezNET/DeezNET.Tests -c Release --filter "FullyQualifiedName~DeezNET.Tests.DecryptionTests"
+        # tests tagged Live call Deezer and compare against data that changes, so they are skipped
+        run: dotnet test ext/DeezNET/DeezNET.Tests -c Release --filter "Category!=Live"
       - name: Upload build artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

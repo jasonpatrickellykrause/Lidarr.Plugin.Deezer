@@ -123,7 +123,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                         await DoTrackDownload(trackId, settings, logger, cancellation);
                         DownloadedSize += trackSize;
                     }
-                    catch (TaskCanceledException) { }
+                    // only a real cancellation is ignored; HttpClient reports its own timeout as a TaskCanceledException,
+                    // and swallowing that would mark the album Completed with the track missing
+                    catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
                     catch (InvalidARLException ex)
                     {
                         arlError = ex;
