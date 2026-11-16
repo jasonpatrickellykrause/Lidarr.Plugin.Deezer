@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # one PR for the test stack instead of one per package
+      test-dependencies:
+        patterns:
+          - "Microsoft.NET.Test.Sdk"
+          - "xunit*"
+          - "Shouldly"
 
   # also keeps the SHA-pinned actions current
   - package-ecosystem: github-actions
