@@ -42,6 +42,14 @@
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+    <!-- fixed in 3.2.0, which ext/Lidarr doesn't reference yet -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-v76p-62qx-wwq2" />
+  </ItemGroup>
+
+  <!-- System.Security.Cryptography.Pkcs 8.0.1 is a transitive dependency of Lidarr.Core, not merged into or shipped with the
+       plugin; Lidarr provides it at runtime. Fixed in 8.0.2. Remove this when ext/Lidarr moves to a patched version. -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-846f-f764-76mx" />
   </ItemGroup>
 
   <ItemGroup>
