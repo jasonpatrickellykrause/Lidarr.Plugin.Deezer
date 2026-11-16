@@ -62,6 +62,16 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.65
+- Tagging no longer stalls when Deezer's public API is over its request quota. The plugin retries three times, then tags the track without genres. Before, it retried every 5 seconds until Deezer accepted the request.
+
+### 10.2.0.63
+- A track that times out now fails the album download. Before, the plugin deleted the partial file, skipped the track, and marked the album Completed, so Lidarr imported it with the track missing.
+- Large FLAC downloads no longer time out after 100 seconds on slow connections. A download that stops receiving data for 60 seconds fails instead of waiting forever.
+- Tracks no longer get a CDN error page embedded as cover art when the cover is unavailable.
+- Tracks with a release date of `0000-00-00` on Deezer are tagged. Before, the plugin left them without tags.
+- Tracks are tagged with their disc number, and multi-disc albums get per-disc track counts.
+
 ### 10.2.0.57
 - Album searches skip a Deezer release with fewer than half the tracks of the album's shortest MusicBrainz release. Deezer often lists the title-track single under the album's name, and Lidarr would grab it and then fail the import with `Has missing tracks`. Editions a few tracks longer or shorter are still offered.
 - The missing-edition warning on **System** > **Status** no longer lists a single grabbed under an album's name. It only covers releases with at least half the tracks of the album's shortest MusicBrainz release.
