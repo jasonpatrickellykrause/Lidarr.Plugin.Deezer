@@ -62,6 +62,9 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.73
+- A track whose Deezer release date is 0000-00-00 now downloads. Before, building its file name failed and the track was skipped.
+
 ### 10.2.0.71
 - The plugin no longer writes an empty `.lrc` file when a track has no synced lyrics, or only blank lines for instrumental breaks. Tracks whose Deezer synced lyrics are all blank now fall back to LRCLIB.
 
