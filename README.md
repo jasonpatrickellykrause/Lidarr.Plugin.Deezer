@@ -62,6 +62,9 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.71
+- The plugin no longer writes an empty `.lrc` file when a track has no synced lyrics, or only blank lines for instrumental breaks. Tracks whose Deezer synced lyrics are all blank now fall back to LRCLIB.
+
 ### 10.2.0.68
 - When the Deezer session expires while two albums download at the same time, the downloads share one session refresh. Before, each download refreshed the session separately at the same moment, a burst of requests that risks getting the ARL flagged.
 

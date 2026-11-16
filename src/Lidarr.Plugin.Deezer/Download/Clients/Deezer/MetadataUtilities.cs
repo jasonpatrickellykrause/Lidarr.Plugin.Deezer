@@ -21,7 +21,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer
             if (!string.IsNullOrWhiteSpace(albumVersion))
                 albumTitle = $"{albumTitle} {albumVersion}";
 
-            var releaseDate = DateTime.Parse(deezerPage["DATA"]!["PHYSICAL_RELEASE_DATE"]!.ToString(), CultureInfo.InvariantCulture);
+            // DateTime.Parse threw on Deezer's 0000-00-00 dates, failing the track before it downloaded even though the
+            // default templates don't use %year%
+            var year = ParseYear(deezerPage["DATA"]?["PHYSICAL_RELEASE_DATE"]?.ToString())
+                       ?? ParseYear(deezerAlbumPage["DATA"]?["PHYSICAL_RELEASE_DATE"]?.ToString())
+                       ?? string.Empty;
+
             return GetFilledTemplate_Internal(template,
                 songTitle,
                 albumTitle,
@@ -31,8 +36,20 @@ namespace NzbDrone.Core.Download.Clients.Deezer
                 deezerPage["DATA"]!["ARTISTS"]!.Select(a => a["ART_NAME"]!.ToString()).ToArray(),
                 $"{(int)deezerPage["DATA"]!["TRACK_NUMBER"]!:00}",
                 deezerAlbumPage["SONGS"]!["total"]!.ToString(),
-                releaseDate.Year.ToString(CultureInfo.InvariantCulture),
+                year,
                 ext);
+        }
+
+        // the year from a yyyy-MM-dd date, or null for 0000 and anything unparseable
+        internal static string ParseYear(string date)
+        {
+            if (date == null || date.Length < 4 ||
+                !int.TryParse(date.AsSpan(0, 4), NumberStyles.None, CultureInfo.InvariantCulture, out var year) || year <= 0)
+            {
+                return null;
+            }
+
+            return year.ToString(CultureInfo.InvariantCulture);
         }
 
         private static string GetFilledTemplate_Internal(string template, string title, string album, string albumArtist, string artist, string[] albumArtists, string[] artists, string track, string trackCount, string year, string ext)

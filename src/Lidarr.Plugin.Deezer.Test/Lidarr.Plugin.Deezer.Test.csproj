@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- the plugin project allows warnings too; the plugin sources compiled in below bring theirs along -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- The plugin's build merges DeezNET, TagLibSharp, and BouncyCastle into its DLL with ILRepack and internalizes them,
+       so a test referencing that DLL would see different DeezNET types than the ones it passes in. Compiling the
+       plugin's sources here, against the same project references, avoids that and lets tests reach internal members. -->
+  <ItemGroup>
+    <Compile Include="..\Lidarr.Plugin.Deezer\**\*.cs" Exclude="..\Lidarr.Plugin.Deezer\bin\**;..\Lidarr.Plugin.Deezer\obj\**" Link="Plugin\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ext\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj" />
+    <ProjectReference Include="..\..\ext\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj" />
+    <ProjectReference Include="..\..\ext\DeezNET\DeezNET\DeezNET.csproj" />
+  </ItemGroup>
+
+  <!-- same test stack as DeezNET -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="Shouldly" Version="4.2.1" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
