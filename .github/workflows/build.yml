@@ -32,6 +32,9 @@ jobs:
   build:
     # Lidarr installs the release asset named for its own .NET version (Lidarr.Plugin.Deezer.net8.0.zip on Lidarr 3.x,
     # .net10.0.zip on Lidarr 4.x), so every release carries both. Each build compiles against the matching Lidarr source.
+    # explicit name: the main branch ruleset requires the check "build (net8.0)", and a matrix with include entries would
+    # otherwise name the job after every matrix value
+    name: build (${{ matrix.framework }})
     strategy:
       matrix:
         include:
