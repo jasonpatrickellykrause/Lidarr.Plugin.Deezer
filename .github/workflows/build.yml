@@ -27,27 +27,45 @@ env:
   PLUGIN_NAME: Lidarr.Plugin.Deezer
   # 10.2 keeps this fork's versions above TrevTV's 10.1.0.x releases
   PLUGIN_VERSION: 10.2.0.${{ github.run_number }}
-  MINIMUM_LIDARR_VERSION: 3.0.0.4855
-  DOTNET_VERSION: 8.0.405
 
 jobs:
   build:
+    # Lidarr installs the release asset named for its own .NET version (Lidarr.Plugin.Deezer.net8.0.zip on Lidarr 3.x,
+    # .net10.0.zip on Lidarr 4.x), so every release carries both. Each build compiles against the matching Lidarr source.
+    # explicit name: the main branch ruleset requires the check "build (net8.0)", and a matrix with include entries would
+    # otherwise name the job after every matrix value
+    name: build (${{ matrix.framework }})
     strategy:
       matrix:
-        framework: [ net8.0 ]
+        include:
+          - framework: net8.0
+            dotnet: 8.0.405
+            # empty: use the ext/Lidarr submodule as committed (3.x)
+            lidarr_ref: ''
+            minimum_lidarr: 3.0.0.4855
+          - framework: net10.0
+            dotnet: 10.0.404
+            # Lidarr 4.0.0.5222 on develop (no tag for nightlies); the first .NET 10 build is abd3d101f
+            lidarr_ref: ddf8080fac613433354d4ee6a36a768148f7099e
+            minimum_lidarr: 4.0.0.5222
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
+      - name: Check out Lidarr ${{ matrix.lidarr_ref }}
+        if: matrix.lidarr_ref != ''
+        run: |
+          git -C ext/Lidarr fetch --depth 1 origin ${{ matrix.lidarr_ref }}
+          git -C ext/Lidarr checkout FETCH_HEAD
       - name: Setup .NET Core
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ matrix.dotnet }}
       - name: Create global.json
         run: |
-          echo '{"sdk":{"version": "${{ env.DOTNET_VERSION }}"}}' > ./global.json
+          echo '{"sdk":{"version": "${{ matrix.dotnet }}"}}' > ./global.json
       - name: Generate metadata
         id: gen_meta
         run: |
@@ -56,22 +74,27 @@ jobs:
         run: |
           sed -i'' -e "s/<AssemblyVersion>[0-9.*]\+<\/AssemblyVersion>/<AssemblyVersion>$PLUGIN_VERSION<\/AssemblyVersion>/g" src/Directory.Build.props
           sed -i'' -e "s/<AssemblyConfiguration>[\$()A-Za-z-]\+<\/AssemblyConfiguration>/<AssemblyConfiguration>${{ steps.gen_meta.outputs.branch }}<\/AssemblyConfiguration>/g" src/Directory.Build.props
-          sed -i'' -e "s/<AssemblyVersion>[0-9.*]\+<\/AssemblyVersion>/<AssemblyVersion>$MINIMUM_LIDARR_VERSION<\/AssemblyVersion>/g" ext/Lidarr/src/Directory.Build.props
+          # the plugin references Lidarr's assemblies at this version, the oldest Lidarr it supports
+          sed -i'' -e "s/<AssemblyVersion>[0-9.*]\+<\/AssemblyVersion>/<AssemblyVersion>${{ matrix.minimum_lidarr }}<\/AssemblyVersion>/g" ext/Lidarr/src/Directory.Build.props
       - name: Build
+        # PluginTargetFramework, not -f/TargetFramework: NuGet restore ignores a global TargetFramework
         run: |
-          dotnet restore src/*.sln -p:TreatWarningsAsErrors=false -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props
-          dotnet build src/*.sln -c Release -f ${{ matrix.framework }} -p:TreatWarningsAsErrors=false -p:PluginRepository=${{ github.repository }} -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props
+          dotnet restore src/*.sln -p:PluginTargetFramework=${{ matrix.framework }} -p:TreatWarningsAsErrors=false -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props
+          dotnet build src/*.sln -c Release -p:PluginTargetFramework=${{ matrix.framework }} -p:TreatWarningsAsErrors=false -p:PluginRepository=${{ github.repository }} -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props
       - name: Test DeezNET
+        # DeezNET targets net6.0/net8.0 and doesn't depend on Lidarr, so testing it once is enough
+        if: matrix.framework == 'net8.0'
         # tests tagged Live call Deezer and compare against data that changes, so they are skipped
         run: dotnet test ext/DeezNET/DeezNET.Tests -c Release --filter "Category!=Live"
       - name: Test plugin
         # builds into _tests, so the plugin artifact in _plugins is untouched
-        run: dotnet test src/Lidarr.Plugin.Deezer.Test -c Release -p:TreatWarningsAsErrors=false -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props --logger "console;verbosity=normal"
+        run: dotnet test src/Lidarr.Plugin.Deezer.Test -c Release -p:PluginTargetFramework=${{ matrix.framework }} -p:TreatWarningsAsErrors=false -p:CustomAfterMicrosoftCommonProps=${{ github.workspace }}/build/SubmoduleAudit.props --logger "console;verbosity=normal"
       - name: Upload build artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.PLUGIN_NAME }}.${{ matrix.framework }}
-          path: ./_plugins/net8.0/${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.*
+          path: ./_plugins/${{ matrix.framework }}/${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.*
+          if-no-files-found: error
 
   release:
     needs: build
@@ -92,10 +115,11 @@ jobs:
         with:
           # full history and tags for the changelog
           fetch-depth: 0
-      - name: Download build artifact
+      - name: Download build artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: ${{ env.PLUGIN_NAME }}.net8.0
+          # one folder per framework: plugin/Lidarr.Plugin.Deezer.net8.0, plugin/Lidarr.Plugin.Deezer.net10.0
+          pattern: ${{ env.PLUGIN_NAME }}.*
           path: plugin
       - name: Generate Changelog
         run: |
@@ -103,12 +127,18 @@ jobs:
           git log --oneline $(git describe --tags --abbrev=0)..HEAD | awk '{print "- " substr($0, index($0,$2))}' >> changelog.txt
           cat changelog.txt
       - name: Zip Plugin
-        run: zip -j ${{ env.PLUGIN_NAME }}.net8.0.zip plugin/${{ env.PLUGIN_NAME }}.*
+        # Lidarr picks the asset whose name ends in net<its .NET major>.0.zip
+        run: |
+          for fw in net8.0 net10.0; do
+            zip -j ${{ env.PLUGIN_NAME }}.$fw.zip plugin/${{ env.PLUGIN_NAME }}.$fw/${{ env.PLUGIN_NAME }}.*
+          done
       - name: Attest build provenance
         # lets anyone check the zip came from this workflow: gh attestation verify <zip> --repo <owner>/<repo>
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: ${{ env.PLUGIN_NAME }}.net8.0.zip
+          subject-path: |
+            ${{ env.PLUGIN_NAME }}.net8.0.zip
+            ${{ env.PLUGIN_NAME }}.net10.0.zip
       - name: Tag the built commit
         # create the tag here so it lands on the commit that was built, not wherever main points by the time the release
         # is created; skipped on a re-run, when the tag already exists
@@ -133,3 +163,4 @@ jobs:
           prerelease: false
           files: |
             ${{ env.PLUGIN_NAME }}.net8.0.zip
+            ${{ env.PLUGIN_NAME }}.net10.0.zip

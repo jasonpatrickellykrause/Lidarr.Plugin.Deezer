@@ -154,7 +154,8 @@ Each merge to `main` that changes the plugin publishes a release. Merges that on
 - Lidarr masks the ARL in its interface and API. A new Saved ARL field shows its last four characters.
 - Removed the code that downloaded shared ARLs from a public web page.
 - Removed unused packages from the plugin: AngleSharp, AngleSharp.XPath, and a SkiaSharp preview build.
-- Builds fail on high or critical NuGet advisories. CI runs DeezNET's decryption tests, pins its actions to commit SHAs, and attests build provenance. Verify a release with `gh attestation verify Lidarr.Plugin.Deezer.net8.0.zip --repo jasonpatrickellykrause/Lidarr.Plugin.Deezer`.
+- Builds fail on high or critical NuGet advisories. CI runs DeezNET's decryption tests, pins its actions to commit SHAs, and attests build provenance. Verify a release with `gh attestation verify Lidarr.Plugin.Deezer.net8.0.zip --repo jasonpatrickellykrause/Lidarr.Plugin.Deezer` (or the `net10.0` zip).
+- Each release has two zips: `net8.0` for Lidarr 3.x and `net10.0` for Lidarr 4.x. Lidarr installs the one for its own .NET version.
 - Dependabot updates the DeezNET submodule.
 
 ### 10.2.0.5

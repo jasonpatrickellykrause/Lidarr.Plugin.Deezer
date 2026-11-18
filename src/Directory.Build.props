@@ -25,6 +25,11 @@
 
     <PluginProject>false</PluginProject>
     <PluginProject Condition="$(MSBuildProjectName.StartsWith('Lidarr.Plugin'))">true</PluginProject>
+
+    <!-- Target framework for the plugin and its tests. CI builds twice: net8.0 against Lidarr 3.x and net10.0 against
+         Lidarr 4.x (-p:PluginTargetFramework=net10.0), because Lidarr installs the release asset named for its own .NET
+         version. A property, not -p:TargetFramework, because NuGet restore ignores a global TargetFramework. -->
+    <PluginTargetFramework Condition="'$(PluginTargetFramework)'==''">net8.0</PluginTargetFramework>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -36,7 +41,7 @@
 
     <!-- Output to _output and _tests respectively -->
     <OutputPath Condition="'$(LidarrProject)'=='true'">$(LidarrRootDir)_output\</OutputPath>
-    <OutputPath Condition="'$(PluginProject)'=='true'">$(LidarrRootDir)_plugins\$(TargetFramework)\$(MSBuildProjectName)</OutputPath>
+    <OutputPath Condition="'$(PluginProject)'=='true'">$(LidarrRootDir)_plugins\$(PluginTargetFramework)\$(MSBuildProjectName)</OutputPath>
     <OutputPath Condition="'$(LidarrOutputType)'=='Test'">$(LidarrRootDir)_tests\</OutputPath>
     <OutputPath Condition="'$(LidarrOutputType)'=='Update'">$(LidarrRootDir)_output\Lidarr.Update\</OutputPath>
 
