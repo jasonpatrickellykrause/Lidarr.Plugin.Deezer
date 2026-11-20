@@ -68,6 +68,24 @@ namespace NzbDrone.Core.Indexers.Deezer
             return string.IsNullOrWhiteSpace(stripped) ? title : stripped;
         }
 
+        // Lidarr maps a search result to the searched album with an exact, case-sensitive title comparison first, and
+        // only falls back to a library-wide title lookup, which gives up when the artist has two releases with that name
+        // (an album and its title-track single) and rejects the result with "Unable to parse albums from release name".
+        // Deezer's capitalisation often differs from MusicBrainz's ("Crown In The Grave" vs "Crown in the Grave"), so a
+        // title that differs from the searched album only in case, accents or punctuation is reported under Lidarr's
+        // spelling. Anything else (an edition note, a different word) is left as Deezer has it.
+        public static string AlignTitle(string deezerTitle, string searchedTitle)
+        {
+            if (string.IsNullOrWhiteSpace(deezerTitle) || string.IsNullOrWhiteSpace(searchedTitle) ||
+                string.Equals(deezerTitle, searchedTitle, StringComparison.Ordinal))
+            {
+                return deezerTitle;
+            }
+
+            var candidate = Normalize(deezerTitle);
+            return candidate.Length > 0 && candidate == Normalize(searchedTitle) ? searchedTitle : deezerTitle;
+        }
+
         public static bool IsCreditedTo(DeezerGwAlbum album, string artist)
         {
             var searched = Normalize(artist);

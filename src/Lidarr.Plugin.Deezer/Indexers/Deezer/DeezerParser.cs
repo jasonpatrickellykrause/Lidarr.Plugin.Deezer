@@ -89,6 +89,7 @@ namespace NzbDrone.Core.Indexers.Deezer
                 if (matching.Count < results.Count)
                     Logger?.Debug("Skipping {0} of {1} Deezer results that aren't '{2}' by '{3}'", results.Count - matching.Count, results.Count, request.SearchedAlbum ?? "any album", request.SearchedArtist ?? "any artist");
 
+                AlignTitles(matching, request.SearchedAlbum);
                 return matching;
             }
 
@@ -104,6 +105,23 @@ namespace NzbDrone.Core.Indexers.Deezer
             // Nothing credited to the artist at all: Deezer may name the artist differently, so keep everything.
             Logger?.Debug("No Deezer results credited to '{0}'; keeping all {1}", request.SearchedArtist ?? "any artist", results.Count);
             return results;
+        }
+
+        // see DeezerResultFilter.AlignTitle: report results that only differ in case/punctuation under Lidarr's title
+        private void AlignTitles(IList<DeezerGwAlbum> results, string searchedAlbum)
+        {
+            if (searchedAlbum == null)
+                return;
+
+            foreach (var result in results)
+            {
+                var aligned = DeezerResultFilter.AlignTitle(result.AlbumTitle, searchedAlbum);
+                if (!string.Equals(aligned, result.AlbumTitle, StringComparison.Ordinal))
+                {
+                    Logger?.Debug("Reporting Deezer album '{0}' as '{1}' so Lidarr matches it to the searched album", result.AlbumTitle, aligned);
+                    result.AlbumTitle = aligned;
+                }
+            }
         }
 
         // A gw api error comes back as HTTP 200 with empty results, so it has to be checked here or it surfaces as a
