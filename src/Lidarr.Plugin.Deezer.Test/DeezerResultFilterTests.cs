@@ -107,6 +107,28 @@ namespace Lidarr.Plugin.Deezer.Test
         }
 
         [Theory]
+        [InlineData("Crown In The Grave", "Crown in the Grave")]
+        [InlineData("EXIT LIFE", "Exit Life")]
+        [InlineData("Don’t Stop Me Now", "Don't Stop Me Now")]
+        [InlineData("Un Verano Sín Ti", "Un verano sin ti")]
+        public void AlignTitleUsesLidarrsSpellingWhenOnlyCaseOrPunctuationDiffers(string deezerTitle, string searched)
+        {
+            DeezerResultFilter.AlignTitle(deezerTitle, searched).ShouldBe(searched);
+        }
+
+        [Theory]
+        [InlineData("Hybrid Theory (20th Anniversary Edition)", "Hybrid Theory")]
+        [InlineData("Burn the Witch - Single", "Burn the Witch")]
+        [InlineData("Meteora", "Hybrid Theory")]
+        [InlineData("Crown in the Grave", "Crown in the Grave")]
+        [InlineData("Crown In The Grave", null)]
+        [InlineData("Crown In The Grave", "")]
+        public void AlignTitleKeepsDeezersTitleOtherwise(string deezerTitle, string searched)
+        {
+            DeezerResultFilter.AlignTitle(deezerTitle, searched).ShouldBe(deezerTitle);
+        }
+
+        [Theory]
         [InlineData("The Beatles", "beatles")]
         [InlineData("AC/DC", "ac dc")]
         [InlineData("Sigur Rós", "sigur ros")]
