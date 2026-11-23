@@ -97,6 +97,10 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         // tracks that came in below the grabbed quality, by the quality they came in
         private readonly Dictionary<Bitrate, int> _lowerTracks = new();
 
+        // file names (without extension) given out in this download, and the track files written, for the album check
+        private readonly HashSet<string> _claimedFileNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _writtenFiles = new();
+
         public async Task DoDownload(DeezerSettings settings, Logger logger, CancellationToken cancellation = default)
         {
             // check the ARL before the first track request rather than alongside it
@@ -169,12 +173,53 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 Status = DownloadItemStatus.Failed;
                 Message = GetFailureMessage(FailedTracks, VerificationFailures, _tracks.Length);
             }
+            else if (!cancellation.IsCancellationRequested && GetMissingFilesMessage(_writtenFiles, _tracks.Length, File.Exists) is { } missingFiles)
+            {
+                Status = DownloadItemStatus.Failed;
+                Message = missingFiles;
+                logger.Error("{0}: {1}", Title, missingFiles);
+            }
             else
             {
                 Status = DownloadItemStatus.Completed;
                 QualityFallback = BuildQualityFallback(RemoteAlbum?.Albums?.FirstOrDefault()?.Id ?? 0, Artist, Title, Bitrate, _tracks.Length, _lowerTracks);
             }
         }
+
+        // Every track reported success, but Lidarr imports from the folder, so check the files are all there. This catches a
+        // track overwriting another and anything that removed a file during the download.
+        internal static string GetMissingFilesMessage(IReadOnlyCollection<string> writtenFiles, int trackCount, Func<string, bool> exists)
+        {
+            var present = writtenFiles.Distinct(StringComparer.OrdinalIgnoreCase).Count(exists);
+            if (present >= trackCount)
+                return null;
+
+            return $"All {trackCount} tracks downloaded, but the download folder has {present} of the {trackCount} track files, so Lidarr would import an incomplete album.";
+        }
+
+        // Track numbers restart on each disc, so "%track% - %title%" can name two tracks the same, such as an "Intro" on
+        // two discs. The second used to overwrite the first, and Lidarr failed the import with a track missing. Only the
+        // later track is renamed, so single-disc albums keep their names. Compared without case, because Windows and macOS
+        // file systems treat names that differ only in case as the same file.
+        internal static string ClaimFileName(ISet<string> claimed, string name, int disc)
+        {
+            if (claimed.Add(name))
+                return name;
+
+            var withDisc = $"{disc}-{name}";
+            if (claimed.Add(withDisc))
+                return withDisc;
+
+            for (var n = 2; ; n++)
+            {
+                var numbered = $"{withDisc} ({n})";
+                if (claimed.Add(numbered))
+                    return numbered;
+            }
+        }
+
+        internal static int ParseDisc(JToken diskNumber) =>
+            int.TryParse(diskNumber?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var disc) && disc > 0 ? disc : 1;
 
         // only for a completed download; a failed one is blocklisted and searched again, so its quality doesn't matter
         internal static QualityFallback BuildQualityFallback(int albumId, string artist, string title, Bitrate requested, int trackCount, IReadOnlyDictionary<Bitrate, int> lowerTracks)
@@ -205,8 +250,10 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             var ext = Bitrate == Bitrate.FLAC ? "flac" : "mp3";
             // one folder per requested quality, so a failed FLAC attempt never shares a folder with a later MP3 grab of the same album
             var albumFolder = $"%albumartist%/%album% [{GetQualityLabel(Bitrate)}]/";
-            var outPath = Path.Combine(settings.DownloadPath, MetadataUtilities.GetFilledTemplate(albumFolder, ext, page, _deezerAlbum), MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", ext, page, _deezerAlbum));
-            var outDir = Path.GetDirectoryName(outPath)!;
+            var outDir = Path.Combine(settings.DownloadPath, MetadataUtilities.GetFilledTemplate(albumFolder, ext, page, _deezerAlbum));
+            var fileName = ClaimFileName(_claimedFileNames, MetadataUtilities.GetFilledTemplate("%track% - %title%", ext, page, _deezerAlbum), ParseDisc(page["DATA"]?["DISK_NUMBER"]));
+            var outPath = Path.Combine(outDir, $"{fileName}.{ext}");
+            outDir = Path.GetDirectoryName(outPath)!;
 
             DownloadFolder = outDir;
             if (!Directory.Exists(outDir))
@@ -262,10 +309,11 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
 
             await DeezerAPI.Instance.Client.Downloader.ApplyMetadataToFile(track, outPath, 512, plainLyrics, GetMusicBrainzIdsForTrack(track), cancellation);
+            _writtenFiles.Add(outPath);
 
             // an empty list, or one with only blank lines, would write an empty .lrc that Lidarr imports next to the track
             if (HasSyncedLines(syncLyrics))
-                await CreateLrcFile(Path.Combine(outDir, MetadataUtilities.GetFilledTemplate("%track% - %title%.%ext%", "lrc", page, _deezerAlbum)), syncLyrics);
+                await CreateLrcFile(Path.Combine(outDir, $"{fileName}.lrc"), syncLyrics);
 
             // TODO: this is currently a waste of resources, if this pr ever gets merged, it can be reenabled
             // https://github.com/Lidarr/Lidarr/pull/4370
