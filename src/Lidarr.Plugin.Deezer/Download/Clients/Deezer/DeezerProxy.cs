@@ -27,13 +27,15 @@ namespace NzbDrone.Core.Download.Clients.Deezer
         private readonly DownloadTaskQueue _taskQueue;
         private readonly IEventAggregator _eventAggregator;
         private readonly IMissingEditionTracker _missingEditionTracker;
+        private readonly IQualityFallbackTracker _qualityFallbackTracker;
 
-        public DeezerProxy(ICacheManager cacheManager, IEventAggregator eventAggregator, IMissingEditionTracker missingEditionTracker, Logger logger)
+        public DeezerProxy(ICacheManager cacheManager, IEventAggregator eventAggregator, IMissingEditionTracker missingEditionTracker, IQualityFallbackTracker qualityFallbackTracker, Logger logger)
         {
             _eventAggregator = eventAggregator;
             _missingEditionTracker = missingEditionTracker;
+            _qualityFallbackTracker = qualityFallbackTracker;
             _startTimeCache = cacheManager.GetCache<DateTime?>(GetType(), "startTimes");
-            _taskQueue = new(500, null, logger, () => eventAggregator.PublishEvent(new DeezerArlRejectedEvent()));
+            _taskQueue = new(500, null, logger, () => eventAggregator.PublishEvent(new DeezerArlRejectedEvent()), OnCompleted);
 
             _taskQueue.StartQueueHandler();
         }
@@ -78,6 +80,15 @@ namespace NzbDrone.Core.Download.Clients.Deezer
             }
 
             return downloadItem.ID;
+        }
+
+        private void OnCompleted(DownloadItem item)
+        {
+            if (item.QualityFallback == null)
+                return;
+
+            _qualityFallbackTracker.Record(item.QualityFallback);
+            _eventAggregator.PublishEvent(new DeezerQualityFallbackEvent());
         }
 
         private DownloadClientItem ToDownloadClientItem(DownloadItem x)

@@ -76,6 +76,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         // set when no MusicBrainz release of the album has as many tracks as Deezer's edition
         public MissingEdition MissingEdition { get; private set; }
 
+        // set when the download completed with some tracks below the grabbed quality
+        public QualityFallback QualityFallback { get; private set; }
+
         public float Progress { get => DownloadedSize / (float)Math.Max(TotalSize, 1); }
         public long DownloadedSize { get; private set; }
         public long TotalSize { get; private set; }
@@ -90,6 +93,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         private DeezerURL _deezerUrl;
         private JToken _deezerAlbum;
         private DateTime _lastARLValidityCheck = DateTime.MinValue;
+
+        // tracks that came in below the grabbed quality, by the quality they came in
+        private readonly Dictionary<Bitrate, int> _lowerTracks = new();
 
         public async Task DoDownload(DeezerSettings settings, Logger logger, CancellationToken cancellation = default)
         {
@@ -166,7 +172,17 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             else
             {
                 Status = DownloadItemStatus.Completed;
+                QualityFallback = BuildQualityFallback(RemoteAlbum?.Albums?.FirstOrDefault()?.Id ?? 0, Artist, Title, Bitrate, _tracks.Length, _lowerTracks);
             }
+        }
+
+        // only for a completed download; a failed one is blocklisted and searched again, so its quality doesn't matter
+        internal static QualityFallback BuildQualityFallback(int albumId, string artist, string title, Bitrate requested, int trackCount, IReadOnlyDictionary<Bitrate, int> lowerTracks)
+        {
+            if (albumId == 0 || lowerTracks.Count == 0)
+                return null;
+
+            return new QualityFallback(albumId, artist, title, requested, trackCount, new Dictionary<Bitrate, int>(lowerTracks));
         }
 
         private async Task DoTrackDownload(long track, DeezerSettings settings, Logger logger, CancellationToken cancellation = default)
@@ -199,7 +215,14 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             try
             {
                 outPath = await WriteTrack(track, outPath, settings, cancellation);
-                TrackVerifier.Verify(outPath, duration, Bitrate, settings.FallbackToLowerBitrate);
+                var verified = TrackVerifier.Verify(outPath, duration, Bitrate, settings.FallbackToLowerBitrate);
+
+                // a 128 grab can fall back up to 320; only a drop is worth reporting
+                if (TrackVerifier.Rank(verified.Bitrate) < TrackVerifier.Rank(Bitrate))
+                {
+                    _lowerTracks[verified.Bitrate] = _lowerTracks.GetValueOrDefault(verified.Bitrate) + 1;
+                    logger.Info("Deezer track {0} in {1} was only available as {2}, below the grabbed {3}", track, Title, GetQualityLabel(verified.Bitrate), GetQualityLabel(Bitrate));
+                }
             }
             catch (TrackVerificationException)
             {
@@ -294,7 +317,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
         }
 
-        private static string GetQualityLabel(Bitrate bitrate) => bitrate switch
+        internal static string GetQualityLabel(Bitrate bitrate) => bitrate switch
         {
             Bitrate.FLAC => "FLAC",
             Bitrate.MP3_320 => "MP3 320",

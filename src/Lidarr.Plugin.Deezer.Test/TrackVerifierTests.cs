@@ -58,6 +58,28 @@ namespace Lidarr.Plugin.Deezer.Test
             result.Duration.TotalSeconds.ShouldBe(3, 0.2);
         }
 
+        [Theory]
+        [InlineData("sine-3s.flac", Bitrate.FLAC)]
+        [InlineData("sine-3s-320.mp3", Bitrate.MP3_320)]
+        [InlineData("sine-3s.mp3", Bitrate.MP3_128)]
+        [InlineData("sine-3s-noid3.mp3", Bitrate.MP3_128)]
+        public void ReportsTheQualityTheFileActuallyIs(string fixture, Bitrate expected)
+        {
+            // requested FLAC with fallback on, so every fixture is allowed and only the detection is tested
+            TrackVerifier.Verify(Fixture(fixture), 3, Bitrate.FLAC, true).Bitrate.ShouldBe(expected);
+        }
+
+        [Theory]
+        [InlineData(0, Bitrate.MP3_128)]
+        [InlineData(128, Bitrate.MP3_128)]
+        [InlineData(223, Bitrate.MP3_128)]
+        [InlineData(224, Bitrate.MP3_320)]
+        [InlineData(320, Bitrate.MP3_320)]
+        public void Mp3BitrateThreshold(int kbps, Bitrate expected)
+        {
+            TrackVerifier.GetMp3Bitrate(kbps).ShouldBe(expected);
+        }
+
         [Fact]
         public void Mp3NamedFlacIsReadAsMp3()
         {
