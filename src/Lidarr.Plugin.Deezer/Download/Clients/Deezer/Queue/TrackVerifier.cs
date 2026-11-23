@@ -17,7 +17,11 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         }
     }
 
-    public record VerifiedTrack(bool IsFlac, TimeSpan Duration);
+    // Bitrate is what the file actually is, which differs from the grab when Deezer fell back to a lower quality
+    public record VerifiedTrack(Bitrate Bitrate, TimeSpan Duration)
+    {
+        public bool IsFlac => Bitrate == Bitrate.FLAC;
+    }
 
     // Checks a decrypted track before it is tagged. A track that finishes downloading can still be unusable: a decryption
     // problem writes noise, and Deezer sometimes serves a 30-second preview in place of the full track. Both used to be
@@ -39,14 +43,25 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             if (requested == Bitrate.FLAC && !isFlac && !fallbackAllowed)
                 throw new TrackVerificationException($"Deezer returned an MP3 for a FLAC grab of {Path.GetFileName(path)}.");
 
-            var duration = ReadDuration(path, isFlac);
+            var (duration, kbps) = ReadProperties(path, isFlac);
             if (duration <= TimeSpan.Zero)
                 throw new TrackVerificationException($"{Path.GetFileName(path)} has no audio.");
 
             CheckDuration(path, duration, expectedSeconds);
 
-            return new VerifiedTrack(isFlac, duration);
+            return new VerifiedTrack(isFlac ? Bitrate.FLAC : GetMp3Bitrate(kbps), duration);
         }
+
+        // Deezer's MP3s are constant 128 or 320 kbps; the midpoint keeps encoder rounding from mattering
+        internal static Bitrate GetMp3Bitrate(int kbps) => kbps >= 224 ? Bitrate.MP3_320 : Bitrate.MP3_128;
+
+        internal static int Rank(Bitrate bitrate) => bitrate switch
+        {
+            Bitrate.FLAC => 3,
+            Bitrate.MP3_320 => 2,
+            Bitrate.MP3_128 => 1,
+            _ => 0
+        };
 
         internal static bool DetectFormat(string path)
         {
@@ -68,13 +83,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             throw new TrackVerificationException($"{Path.GetFileName(path)} is not FLAC or MP3 audio (starts with {Convert.ToHexString(header)}). The track may not have decrypted correctly.");
         }
 
-        private static TimeSpan ReadDuration(string path, bool isFlac)
+        private static (TimeSpan duration, int kbps) ReadProperties(string path, bool isFlac)
         {
             try
             {
                 // the MIME type, not the extension, picks the parser; with fallback the extension can still be wrong here
                 using var file = TagLib.File.Create(path, isFlac ? "taglib/flac" : "taglib/mp3", TagLib.ReadStyle.Average);
-                return file.Properties?.Duration ?? TimeSpan.Zero;
+                return (file.Properties?.Duration ?? TimeSpan.Zero, file.Properties?.AudioBitrate ?? 0);
             }
             catch (Exception ex) when (ex is TagLib.CorruptFileException or TagLib.UnsupportedFormatException)
             {

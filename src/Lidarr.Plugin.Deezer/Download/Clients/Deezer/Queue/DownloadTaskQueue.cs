@@ -24,10 +24,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         private DeezerSettings _settings;
         private readonly Logger _logger;
         private readonly Action _onArlRejected;
+        private readonly Action<DownloadItem> _onCompleted;
 
-        public DownloadTaskQueue(int capacity, DeezerSettings settings, Logger logger, Action onArlRejected = null)
+        public DownloadTaskQueue(int capacity, DeezerSettings settings, Logger logger, Action onArlRejected = null, Action<DownloadItem> onCompleted = null)
         {
             _onArlRejected = onArlRejected;
+            _onCompleted = onCompleted;
             BoundedChannelOptions options = new(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait
@@ -59,6 +61,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
                     if (item.ArlRejected)
                         _onArlRejected?.Invoke();
+
+                    if (item.Status == DownloadItemStatus.Completed)
+                        NotifyCompleted(item);
                 }
                 catch (TaskCanceledException) { }
                 catch (OperationCanceledException) { }
@@ -102,6 +107,19 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             lock (_lock)
                 remainingTasks = _runningTasks.ToList();
             await Task.WhenAll(remainingTasks);
+        }
+
+        // reporting is best-effort; an exception here would otherwise reach HandleTask's catch and mark a good download Failed
+        private void NotifyCompleted(DownloadItem item)
+        {
+            try
+            {
+                _onCompleted?.Invoke(item);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Couldn't report the completed Deezer download " + item.Title);
+            }
         }
 
         public async ValueTask QueueBackgroundWorkItemAsync(DownloadItem workItem)
