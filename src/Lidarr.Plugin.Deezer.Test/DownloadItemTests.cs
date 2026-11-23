@@ -39,5 +39,21 @@ namespace Lidarr.Plugin.Deezer.Test
 
             DownloadItem.HasSyncedLines(lyrics).ShouldBeTrue();
         }
+
+        [Fact]
+        public void FailureMessageWithoutVerificationFailures()
+        {
+            DownloadItem.GetFailureMessage(2, 0, 10)
+                .ShouldBe("2 of 10 tracks failed to download. The Lidarr log has the error for each track.");
+        }
+
+        [Fact]
+        public void FailureMessageNamesVerificationFailures()
+        {
+            var message = DownloadItem.GetFailureMessage(3, 1, 10);
+
+            message.ShouldStartWith("3 of 10 tracks failed to download. 1 downloaded but failed the audio check");
+            message.ShouldContain("30-second preview");
+        }
     }
 }

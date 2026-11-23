@@ -82,6 +82,9 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
         public int FailedTracks { get; private set; }
 
+        // tracks that downloaded but failed TrackVerifier; counted in FailedTracks too
+        public int VerificationFailures { get; private set; }
+
         private (long id, long size)[] _tracks;
         private string[] _recordingIds;
         private DeezerURL _deezerUrl;
@@ -158,7 +161,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             else if (FailedTracks > 0)
             {
                 Status = DownloadItemStatus.Failed;
-                Message = $"{FailedTracks} of {_tracks.Length} tracks failed to download. The Lidarr log has the error for each track.";
+                Message = GetFailureMessage(FailedTracks, VerificationFailures, _tracks.Length);
             }
             else
             {
@@ -196,6 +199,13 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             try
             {
                 outPath = await WriteTrack(track, outPath, settings, cancellation);
+                TrackVerifier.Verify(outPath, duration, Bitrate, settings.FallbackToLowerBitrate);
+            }
+            catch (TrackVerificationException)
+            {
+                DeletePartialFile(outPath);
+                VerificationFailures++;
+                throw;
             }
             catch
             {
@@ -258,6 +268,15 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                 outPath = CorrectExtension(outPath);
 
             return outPath;
+        }
+
+        internal static string GetFailureMessage(int failedTracks, int verificationFailures, int totalTracks)
+        {
+            var message = $"{failedTracks} of {totalTracks} tracks failed to download.";
+            if (verificationFailures > 0)
+                message += $" {verificationFailures} downloaded but failed the audio check (unreadable, wrong format, or shorter than Deezer lists, such as a 30-second preview).";
+
+            return message + " The Lidarr log has the error for each track.";
         }
 
         private static void DeletePartialFile(string path)
