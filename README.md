@@ -17,10 +17,14 @@ The main differences from upstream:
 You can't install this fork alongside TrevTV's plugin. See [Switching from another Deezer plugin](#switching-from-another-deezer-plugin).
 
 ## Installation
-This requires Lidarr 3.1.2.4938 or later on the `develop` or `nightly` branch. The `master` branch doesn't support plugins yet. My docker-compose is setup like the following.
+This requires Lidarr 3.1.6.5078 or later. Plugin support reached the `master` branch in [3.1.6.5079](https://github.com/Lidarr/Lidarr/releases/tag/v3.1.6.5079), so any current release works. Lidarr 4.x needs 4.0.0.5222 or later.
+
+Each version has two releases: one with `Lidarr.Plugin.Deezer.net8.0.zip` for Lidarr 3.x, and one tagged `-net10.0` with `Lidarr.Plugin.Deezer.net10.0.zip` for Lidarr 4.x. Lidarr installs the one for its own .NET version and skips a release whose **Minimum Lidarr Version** is newer than itself. On an older Lidarr, it installs the newest release that still supports it.
+
+My docker-compose is set up like the following.
 ```yml
   lidarr:
-    image: ghcr.io/hotio/lidarr:testing
+    image: ghcr.io/hotio/lidarr:release
     container_name: lidarr
     environment:
       - PUID:100
