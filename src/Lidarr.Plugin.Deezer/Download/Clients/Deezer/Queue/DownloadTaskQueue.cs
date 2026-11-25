@@ -20,16 +20,21 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
         private readonly List<Task> _runningTasks = new();
         private readonly object _lock = new();
+        private readonly CancellationTokenSource _stopping = new();
 
         private DeezerSettings _settings;
         private readonly Logger _logger;
         private readonly Action _onArlRejected;
         private readonly Action<DownloadItem> _onCompleted;
+        private readonly Action _onChanged;
+        private readonly Action _beforeDownload;
 
-        public DownloadTaskQueue(int capacity, DeezerSettings settings, Logger logger, Action onArlRejected = null, Action<DownloadItem> onCompleted = null)
+        public DownloadTaskQueue(int capacity, DeezerSettings settings, Logger logger, Action onArlRejected = null, Action<DownloadItem> onCompleted = null, Action onChanged = null, Action beforeDownload = null)
         {
             _onArlRejected = onArlRejected;
             _onCompleted = onCompleted;
+            _onChanged = onChanged;
+            _beforeDownload = beforeDownload;
             BoundedChannelOptions options = new(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait
@@ -41,11 +46,38 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             _logger = logger;
         }
 
+        public bool IsStopped => _stopping.IsCancellationRequested;
+
         public void SetSettings(DeezerSettings settings) => _settings = settings;
 
         public void StartQueueHandler()
         {
-            Task.Run(() => BackgroundProcessing());
+            Task.Run(() => BackgroundProcessing(_stopping.Token));
+        }
+
+        // Stops taking new items and cancels running downloads, which stay Downloading so a saved queue restarts them.
+        // Lidarr restarts in the same process after a plugin install or update and builds a new queue; without this
+        // the old one kept downloading alongside it.
+        public void Stop()
+        {
+            List<CancellationTokenSource> sources;
+            lock (_lock)
+            {
+                if (_stopping.IsCancellationRequested)
+                    return;
+
+                _stopping.Cancel();
+                sources = _cancellationSources.Values.ToList();
+            }
+
+            foreach (var source in sources)
+            {
+                try
+                {
+                    source.Cancel();
+                }
+                catch (ObjectDisposedException) { }
+            }
         }
 
         private async Task BackgroundProcessing(CancellationToken stoppingToken = default)
@@ -56,7 +88,6 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             {
                 try
                 {
-                    item.Status = DownloadItemStatus.Downloading;
                     await task;
 
                     if (item.ArlRejected)
@@ -88,20 +119,44 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     semaphore.Release();
                     lock (_lock)
                         _runningTasks.Remove(task);
+
+                    NotifyChanged();
                 }
             }
 
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                await semaphore.WaitAsync(stoppingToken);
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    await semaphore.WaitAsync(stoppingToken);
 
-                var item = await DequeueAsync(stoppingToken);
-                var token = GetTokenForItem(item);
-                var downloadTask = item.DoDownload(_settings, _logger, token);
+                    var item = await DequeueAsync(stoppingToken);
 
-                lock (_lock)
-                    _runningTasks.Add(HandleTask(item, downloadTask));
+                    // an item removed while it waited is still in the channel; skip it rather than download it unseen
+                    CancellationToken token;
+                    lock (_lock)
+                    {
+                        if (!_cancellationSources.TryGetValue(item, out var source))
+                        {
+                            semaphore.Release();
+                            continue;
+                        }
+
+                        token = source.Token;
+                    }
+
+                    BeforeDownload();
+
+                    item.Status = DownloadItemStatus.Downloading;
+                    NotifyChanged();
+
+                    var downloadTask = item.DoDownload(_settings, _logger, token);
+
+                    lock (_lock)
+                        _runningTasks.Add(HandleTask(item, downloadTask));
+                }
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
 
             List<Task> remainingTasks;
             lock (_lock)
@@ -122,12 +177,71 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             }
         }
 
+        // After Stop the state on disk is the one to restart from, so the cancelled downloads must not overwrite it.
+        private void NotifyChanged()
+        {
+            if (_stopping.IsCancellationRequested)
+                return;
+
+            try
+            {
+                _onChanged?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Couldn't save the Deezer download queue");
+            }
+        }
+
+        private void BeforeDownload()
+        {
+            try
+            {
+                _beforeDownload?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Couldn't prepare the Deezer session before a download");
+            }
+        }
+
         public async ValueTask QueueBackgroundWorkItemAsync(DownloadItem workItem)
         {
+            // registered before it reaches the channel, so the handler always finds its cancellation source
+            lock (_lock)
+            {
+                _items.Add(workItem);
+                _cancellationSources.Add(workItem, new CancellationTokenSource());
+            }
+
             await _queue.Writer.WriteAsync(workItem);
-            CancellationTokenSource token = new();
-            _items.Add(workItem);
-            _cancellationSources.Add(workItem, token);
+            NotifyChanged();
+        }
+
+        // Adds items loaded from the saved queue. Queued items go back in line; the rest are only reported to Lidarr.
+        public void Restore(IEnumerable<DownloadItem> items)
+        {
+            var toQueue = new List<DownloadItem>();
+            lock (_lock)
+            {
+                foreach (var item in items)
+                {
+                    if (_items.Any(i => i.ID == item.ID))
+                        continue;
+
+                    _items.Add(item);
+                    _cancellationSources.Add(item, new CancellationTokenSource());
+
+                    if (item.Status == DownloadItemStatus.Queued)
+                        toQueue.Add(item);
+                }
+            }
+
+            foreach (var item in toQueue)
+            {
+                if (!_queue.Writer.TryWrite(item))
+                    _logger.Warn("The Deezer download queue is full, so {0} - {1} wasn't restarted", item.Artist, item.Title);
+            }
         }
 
         private async ValueTask<DownloadItem> DequeueAsync(CancellationToken cancellationToken)
@@ -141,21 +255,30 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             if (workItem == null)
                 return;
 
-            _cancellationSources[workItem].Cancel();
+            lock (_lock)
+            {
+                if (_cancellationSources.Remove(workItem, out var source))
+                    source.Cancel();
 
-            _items.Remove(workItem);
-            _cancellationSources.Remove(workItem);
+                _items.Remove(workItem);
+            }
+
+            NotifyChanged();
         }
 
         public DownloadItem[] GetQueueListing()
         {
-            return _items.ToArray();
+            lock (_lock)
+                return _items.ToArray();
         }
 
         public CancellationToken GetTokenForItem(DownloadItem item)
         {
-            if (_cancellationSources.TryGetValue(item, out var src))
-                return src!.Token;
+            lock (_lock)
+            {
+                if (_cancellationSources.TryGetValue(item, out var src))
+                    return src!.Token;
+            }
 
             return default;
         }
