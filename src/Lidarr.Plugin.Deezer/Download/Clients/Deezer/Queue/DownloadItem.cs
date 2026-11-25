@@ -44,6 +44,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
                     Status = DownloadItemStatus.Queued,
                     Bitrate = bitrate,
                     RemoteAlbum = remoteAlbum,
+                    AlbumId = remoteAlbum.Albums?.FirstOrDefault()?.Id ?? 0,
                     _deezerUrl = deezerUrl,
                 };
 
@@ -61,12 +62,28 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         public string Artist { get; private set; }
         public bool Explicit { get; private set; }
 
+        // null for an item loaded from the saved queue after a restart; AlbumId and the MusicBrainz IDs are kept instead
         public RemoteAlbum RemoteAlbum {  get; private set; }
+
+        // Lidarr's album ID, or 0 if unknown
+        public int AlbumId { get; private set; }
 
         public string DownloadFolder { get; private set; }
 
         public Bitrate Bitrate { get; private set; }
-        public DownloadItemStatus Status { get; set; }
+
+        public DownloadItemStatus Status
+        {
+            get => _status;
+            set
+            {
+                _status = value;
+                StatusChangedAt = DateTime.UtcNow;
+            }
+        }
+
+        // when Status last changed, so the saved queue can drop failed items Lidarr never removed
+        public DateTime StatusChangedAt { get; private set; }
 
         // shown in Lidarr's Activity queue next to a failed or warning item
         public string Message { get; set; }
@@ -88,6 +105,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         // tracks that downloaded but failed TrackVerifier; counted in FailedTracks too
         public int VerificationFailures { get; private set; }
 
+        private DownloadItemStatus _status;
         private (long id, long size)[] _tracks;
         private string[] _recordingIds;
         private DeezerURL _deezerUrl;
@@ -105,6 +123,10 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
         {
             // check the ARL before the first track request rather than alongside it
             EnsureValidity();
+
+            // an item restored after a restart has only its saved fields, so fetch the track list again
+            if (_deezerAlbum == null)
+                await SetDeezerData(cancellation);
 
             List<Task> tasks = new();
             using SemaphoreSlim semaphore = new(1, 1);
@@ -161,6 +183,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
             await Task.WhenAll(tasks);
 
+            // Cancelled by a remove or by Lidarr shutting down. Every track swallows the cancellation, so without this
+            // the checks below found no failures and marked the album Completed. A shutdown leaves it Downloading, so
+            // the saved queue restarts it.
+            if (cancellation.IsCancellationRequested)
+                return;
+
             if (arlError != null)
             {
                 // not the release's fault, so don't let Lidarr blocklist it; a warning keeps it visible until the ARL is replaced
@@ -182,7 +210,7 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             else
             {
                 Status = DownloadItemStatus.Completed;
-                QualityFallback = BuildQualityFallback(RemoteAlbum?.Albums?.FirstOrDefault()?.Id ?? 0, Artist, Title, Bitrate, _tracks.Length, _lowerTracks);
+                QualityFallback = BuildQualityFallback(AlbumId, Artist, Title, Bitrate, _tracks.Length, _lowerTracks);
             }
         }
 
@@ -533,6 +561,57 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             {
                 // the warning is best-effort; never fail the grab over it
             }
+        }
+
+        internal SavedDownload ToSaved() => new()
+        {
+            Id = ID,
+            DeezerUrl = _deezerUrl?.Url,
+            DeezerAlbumId = _deezerUrl?.Id ?? 0,
+            Bitrate = Bitrate,
+            Status = Status,
+            StatusChangedAt = StatusChangedAt,
+            Message = Message,
+            Title = Title,
+            Artist = Artist,
+            Explicit = Explicit,
+            DownloadFolder = DownloadFolder,
+            TotalSize = TotalSize,
+            AlbumId = AlbumId,
+            MusicBrainzIds = MusicBrainzIds,
+            RecordingIds = _recordingIds,
+        };
+
+        // A download that was queued or running when Lidarr stopped starts again from the first track, under the same
+        // ID so Lidarr's tracked download finds it. The tracks are written to the same file names, so a partly
+        // downloaded folder is overwritten rather than doubled.
+        internal static DownloadItem FromSaved(SavedDownload saved)
+        {
+            var restart = saved.Status is DownloadItemStatus.Queued or DownloadItemStatus.Downloading;
+
+            var item = new DownloadItem
+            {
+                ID = saved.Id,
+                Bitrate = saved.Bitrate,
+                Status = restart ? DownloadItemStatus.Queued : saved.Status,
+                Message = saved.Message,
+                Title = saved.Title,
+                Artist = saved.Artist,
+                Explicit = saved.Explicit,
+                DownloadFolder = saved.DownloadFolder,
+                TotalSize = saved.TotalSize,
+                DownloadedSize = saved.Status == DownloadItemStatus.Completed ? saved.TotalSize : 0,
+                AlbumId = saved.AlbumId,
+                MusicBrainzIds = saved.MusicBrainzIds ?? new MusicBrainzIds(),
+                _recordingIds = saved.RecordingIds,
+                _deezerUrl = new DeezerURL(saved.DeezerUrl, EntityType.Album, saved.DeezerAlbumId),
+            };
+
+            // keep the original time, so the age of a failed item counts from when it failed, not from the restart
+            if (!restart)
+                item.StatusChangedAt = saved.StatusChangedAt;
+
+            return item;
         }
 
         private MusicBrainzIds GetMusicBrainzIdsForTrack(long trackId)
