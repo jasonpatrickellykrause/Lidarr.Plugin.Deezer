@@ -46,6 +46,8 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
             _logger = logger;
         }
 
+        internal static TimeSpan SettingsPollInterval { get; set; } = TimeSpan.FromSeconds(5);
+
         public bool IsStopped => _stopping.IsCancellationRequested;
 
         public void SetSettings(DeezerSettings settings) => _settings = settings;
@@ -144,6 +146,12 @@ namespace NzbDrone.Core.Download.Clients.Deezer.Queue
 
                         token = source.Token;
                     }
+
+                    // The settings arrive with Lidarr's first queue poll or grab. A download restored at startup can be
+                    // dequeued before that, and running it without a download path failed every track, so Lidarr
+                    // blocklisted a good release. It waits as Queued instead.
+                    while (_settings == null)
+                        await Task.Delay(SettingsPollInterval, stoppingToken);
 
                     BeforeDownload();
 
