@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using DeezNET;
 using DeezNET.Data;
 using NLog;
@@ -194,6 +195,20 @@ namespace Lidarr.Plugin.Deezer.Test
             token.IsCancellationRequested.ShouldBeTrue();
             queue.GetQueueListing().ShouldBeEmpty();
             saves.ShouldBe(1);
+        }
+
+        [Fact]
+        public async Task A_restored_download_waits_for_settings_instead_of_failing()
+        {
+            var queue = new DownloadTaskQueue(10, null, _logger);
+            var item = DownloadItem.FromSaved(Saved(DownloadItemStatus.Downloading));
+            queue.Restore(new[] { item });
+
+            queue.StartQueueHandler();
+            await Task.Delay(300);
+
+            item.Status.ShouldBe(DownloadItemStatus.Queued);
+            queue.Stop();
         }
 
         [Fact]
