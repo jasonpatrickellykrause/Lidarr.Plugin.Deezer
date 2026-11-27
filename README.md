@@ -71,6 +71,9 @@ If System > Plugins still lists Deezer twice after the restart, uninstall both, 
 ## Changelog
 Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/matrix-runout/Lidarr.Plugin.Deezer/releases).
 
+### 10.2.0.98
+- The repository moved to `matrix-runout/Lidarr.Plugin.Deezer`. Lidarr installs this update into a new plugin folder, so the plugin removes the copy under the previous owner on its first start and logs a warning asking you to restart Lidarr. After the restart, one copy loads. See [Installed before the move to matrix-runout?](#installed-before-the-move-to-matrix-runout).
+
 ### 10.2.0.73
 - A track whose Deezer release date is 0000-00-00 now downloads. Before, building its file name threw an error and the track failed to download.
 
