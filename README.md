@@ -39,7 +39,7 @@ My docker-compose is set up like the following.
     restart: unless-stopped
 ```
 
-1. In Lidarr, go to `System -> Plugins`, paste `https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer` into the GitHub URL box, and press Install.
+1. In Lidarr, go to `System -> Plugins`, paste `https://github.com/matrix-runout/Lidarr.Plugin.Deezer` into the GitHub URL box, and press Install.
 2. Go into the Indexer settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
 3. Paste your Deezer ARL into the ARL box and press Save. It will load for a while as it makes several calls to Deezer. After saving, the ARL is masked, and the Saved ARL field shows its last four characters so you can compare it with a new one.
 4. Go into the Download Client settings and press Add. In the modal, choose `Deezer` (under Other at the bottom).
@@ -54,7 +54,7 @@ Only one copy of a Deezer plugin can be installed. Two copies (for example TrevT
 To switch from TrevTV's plugin:
 1. Back up Lidarr (System > Backup > Backup Now).
 2. In System > Plugins, uninstall the TrevTV Deezer plugin, then restart Lidarr.
-3. Install this plugin from `https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer`, then restart Lidarr again.
+3. Install this plugin from `https://github.com/matrix-runout/Lidarr.Plugin.Deezer`, then restart Lidarr again.
 
 Your Deezer indexer and download client settings are kept in Lidarr's database, so you don't need to add them again.
 
@@ -63,8 +63,13 @@ If you installed this fork's 10.1.0.1 release, the uninstall button can't remove
 2. Delete the `Lidarr.Plugin.Deezer` folder under `plugins/jasonpatrickellykrause/` in Lidarr's data folder. That's `/var/lib/lidarr/plugins` for a native Linux install, or `/config/plugins` in Docker.
 3. Start Lidarr and install the current release.
 
+### Installed before the move to matrix-runout?
+This fork moved to `matrix-runout/Lidarr.Plugin.Deezer` from its previous GitHub account. Lidarr keeps each plugin in a folder named after the repository owner, so the first update after the move installs into a new folder next to the old one. On its first start, the updated plugin removes the old copy and logs a warning asking you to restart Lidarr. Restart once and the duplicate is gone. Your indexer and download client settings are kept.
+
+If System > Plugins still lists Deezer twice after the restart, uninstall both, install from `https://github.com/matrix-runout/Lidarr.Plugin.Deezer`, and restart Lidarr.
+
 ## Changelog
-Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/jasonpatrickellykrause/Lidarr.Plugin.Deezer/releases).
+Each merge to `main` that changes the plugin publishes a release. Merges that only change documentation or CI configuration don't. Every release also lists its commits on the [Releases page](https://github.com/matrix-runout/Lidarr.Plugin.Deezer/releases).
 
 ### 10.2.0.73
 - A track whose Deezer release date is 0000-00-00 now downloads. Before, building its file name threw an error and the track failed to download.
@@ -158,7 +163,7 @@ Each merge to `main` that changes the plugin publishes a release. Merges that on
 - Lidarr masks the ARL in its interface and API. A new Saved ARL field shows its last four characters.
 - Removed the code that downloaded shared ARLs from a public web page.
 - Removed unused packages from the plugin: AngleSharp, AngleSharp.XPath, and a SkiaSharp preview build.
-- Builds fail on high or critical NuGet advisories. CI runs DeezNET's decryption tests, pins its actions to commit SHAs, and attests build provenance. Verify a release with `gh attestation verify Lidarr.Plugin.Deezer.net8.0.zip --repo jasonpatrickellykrause/Lidarr.Plugin.Deezer` (or the `net10.0` zip).
+- Builds fail on high or critical NuGet advisories. CI runs DeezNET's decryption tests, pins its actions to commit SHAs, and attests build provenance. Verify a release with `gh attestation verify Lidarr.Plugin.Deezer.net8.0.zip --repo matrix-runout/Lidarr.Plugin.Deezer` (or the `net10.0` zip).
 - Each release has two zips: `net8.0` for Lidarr 3.x and `net10.0` for Lidarr 4.x. Lidarr installs the one for its own .NET version.
 - Dependabot updates the DeezNET submodule.
 
