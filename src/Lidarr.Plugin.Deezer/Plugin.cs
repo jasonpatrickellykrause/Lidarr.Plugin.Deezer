@@ -6,7 +6,7 @@ namespace NzbDrone.Core.Plugins
     public class DeezerPlugin : Plugin
     {
         // used when the build doesn't pass a repository, such as a local build
-        private const string DefaultRepository = "jasonpatrickellykrause/Lidarr.Plugin.Deezer";
+        private const string DefaultRepository = "matrix-runout/Lidarr.Plugin.Deezer";
 
         // Lidarr installs into plugins/<owner>/<repo> from the URL the user enters, but uninstalls and checks for
         // updates using GithubUrl. CI stamps the repository it builds from so the two always match, including in forks.
